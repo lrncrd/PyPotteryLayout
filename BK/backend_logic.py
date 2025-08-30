@@ -11,8 +11,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import rectpack
 import openpyxl
-import io
-import base64
 
 # Default page sizes in pixels (300 DPI approximations)
 PAGE_SIZES_PX = {
@@ -113,7 +111,7 @@ def get_metadata_headers(filepath):
 def load_metadata(filepath, status_callback=print):
     if not filepath:
         return None
-    status_callback(f"Loading metadata from: {filepath}...")
+    status_callback(f"Caricamento metadati da: {filepath}...")
     try:
         workbook = openpyxl.load_workbook(filepath)
         sheet = workbook.active
@@ -122,21 +120,21 @@ def load_metadata(filepath, status_callback=print):
         for row in sheet.iter_rows(min_row=2, values_only=True):
             if row and row[0]:
                 metadata[row[0]] = {header[i]: row[i] for i in range(1, len(row))}
-        status_callback(f"Loaded metadata for {len(metadata)} items.")
+        status_callback(f"Caricati metadati per {len(metadata)} elementi.")
         return metadata
     except FileNotFoundError:
-        status_callback(f"Warning: Metadata file '{filepath}' not found.")
+        status_callback(f"Attenzione: File metadati '{filepath}' non trovato.")
         return None
     except Exception as e:
-        status_callback(f"Error loading Excel file: {e}")
+        status_callback(f"Errore nel caricamento del file Excel: {e}")
         return None
 
 
 def load_images_with_info(folder_path, status_callback=print):
     image_data, supported_formats = [], ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')
-    status_callback(f"Loading images from: {folder_path}...")
+    status_callback(f"Caricamento immagini da: {folder_path}...")
     if not os.path.isdir(folder_path):
-        raise FileNotFoundError(f"'{folder_path}' does not exist.")
+        raise FileNotFoundError(f"'{folder_path}' non esiste.")
     for filename in sorted(os.listdir(folder_path)):
         if filename.lower().endswith(supported_formats):
             try:
@@ -145,94 +143,13 @@ def load_images_with_info(folder_path, status_callback=print):
                 image_data.append({'img': img.copy(), 'name': filename})
                 img.close()
             except IOError:
-                status_callback(f"Warning: Could not load {filename}.")
+                status_callback(f"Attenzione: Impossibile caricare {filename}.")
     status_callback(f"Caricati {len(image_data)} immagini.")
     return image_data
 
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
-
-
-def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback=print):
-    """
-    Ordina le immagini con ordinamento gerarchico a due livelli.
-    
-    Args:
-        image_data: Lista di dati immagine
-        primary_sort: Campo di ordinamento primario
-        secondary_sort: Campo di ordinamento secondario (può essere 'none', 'random', 'alphabetical', 'natural_name', o un campo metadati)
-        metadata: Dizionario metadati
-        status_callback: Funzione per i messaggi di stato
-    """
-    if not image_data:
-        return image_data
-    
-    # Se non c'è ordinamento primario valido, usa alfabetico
-    if not primary_sort or primary_sort in ['', 'alphabetical']:
-        primary_sort = 'alphabetical'
-    
-    # Messaggio di status
-    if secondary_sort and secondary_sort != 'none':
-        status_callback(f"Ordinamento gerarchico: '{primary_sort}' -> '{secondary_sort}'...")
-    else:
-        status_callback(f"Ordinamento: '{primary_sort}'...")
-    
-    def get_sort_key(img_data, sort_field):
-        """Ottieni la chiave di ordinamento per un'immagine."""
-        if sort_field == 'random':
-            return random.random()
-        elif sort_field == 'natural_name':
-            return natural_sort_key(img_data['name'])
-        elif sort_field == 'alphabetical':
-            return img_data['name'].lower()
-        else:
-            # Ordinamento per metadati
-            if metadata and img_data['name'] in metadata:
-                value = metadata[img_data['name']].get(sort_field, '')
-                # Se il valore è None o vuoto, usa un valore di fallback
-                if value is None:
-                    value = 'zzz_empty'
-                elif isinstance(value, (int, float)):
-                    return value  # Mantieni i numeri come numeri per ordinamento corretto
-                else:
-                    # Per stringhe, prova a convertire in numero se possibile
-                    str_value = str(value).strip()
-                    try:
-                        return float(str_value)
-                    except ValueError:
-                        return str_value.lower()
-            return 'zzz_no_metadata'
-    
-    # Applica ordinamento gerarchico
-    if primary_sort == 'random' and (not secondary_sort or secondary_sort == 'none'):
-        # Se l'ordinamento primario è random e non c'è secondario, randomizza tutto
-        random.shuffle(image_data)
-    else:
-        # Crea chiavi composite per ordinamento gerarchico
-        def composite_sort_key(img_data):
-            primary_key = get_sort_key(img_data, primary_sort)
-            
-            if secondary_sort and secondary_sort != 'none':
-                # Gestione speciale per quando il primario è random ma il secondario no
-                if primary_sort == 'random':
-                    # Se il primario è random, usa un valore random come primario
-                    # ma mantieni l'ordinamento secondario deterministico
-                    primary_key = random.random()
-                
-                secondary_key = get_sort_key(img_data, secondary_sort)
-                
-                # Se il secondario è random, genera un valore random
-                if secondary_sort == 'random':
-                    secondary_key = random.random()
-                
-                return (primary_key, secondary_key, natural_sort_key(img_data['name']))
-            else:
-                return (primary_key, natural_sort_key(img_data['name']))
-        
-        image_data.sort(key=composite_sort_key)
-    
-    return image_data
 
 
 def create_scale_bar(target_cm, pixels_per_cm, scale_factor, status_callback=print):
@@ -273,7 +190,7 @@ def scale_images(image_data, scale_factor, status_callback=print):
 
 
 def add_captions_to_images(image_data, metadata, font_size, caption_padding, status_callback=print):
-    status_callback("Adding captions to images...")
+    status_callback("Aggiunta didascalie alle immagini...")
     font = get_font(font_size)
     for data in image_data:
         img = data['img']
@@ -349,7 +266,7 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         if page_has_images:
             pages.append(current_page)
         if not page_has_images and image_index < len(image_data):
-            status_callback("WARNING: Remaining images may be too large.")
+            status_callback("ATTENZIONE: Immagini rimanenti potrebbero essere troppo grandi.")
             break
     return pages
 
@@ -379,30 +296,27 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_
 
 
 def draw_margin_border(page, margin_px, status_callback=print):
-    """Draw a border frame to visualize page margins."""
+    """Disegna una cornice per visualizzare i margini della pagina."""
     if margin_px <= 0:
         return page
     
-    status_callback("Adding margin borders...")
+    status_callback("Aggiunta cornice margini...")
     draw = ImageDraw.Draw(page)
     
-    # Calculate border points
+    # Calcola i punti della cornice
     page_width, page_height = page.size
     
-    # Outer rectangle (page border)
+    # Rettangolo esterno (bordo pagina)
     outer_rect = [0, 0, page_width - 1, page_height - 1]
     
-    # Inner rectangle (content area)
+    # Rettangolo interno (area contenuto)
     inner_rect = [margin_px, margin_px, page_width - margin_px - 1, page_height - margin_px - 1]
     
-    # Draw thin gray border to show margins
-    # Outer border (page)
+    # Disegna cornice sottile grigia per mostrare i margini
+    # Bordo esterno (pagina)
     draw.rectangle(outer_rect, outline="lightgray", width=1)
     
-    # Inner border (content area)
-    draw.rectangle(inner_rect, outline="gray", width=2)
-    
-    return page
+    # Bordo interno (area contenuto)
     draw.rectangle(inner_rect, outline="gray", width=2)
     
     # Linee d'angolo per enfatizzare i margini
@@ -426,142 +340,41 @@ def draw_margin_border(page, margin_px, status_callback=print):
 
 
 def save_output(pages, output_file, output_dpi=300, status_callback=print):
-    """Save output pages to file, supporting PNG, JPG, PDF, and SVG formats."""
     if not pages:
-        status_callback("No pages generated.")
+        status_callback("Nessuna pagina generata.")
         return
-    
     output_path = Path(output_file)
-    
-    # Create export directory structure
-    export_dir = output_path.parent / "export"
-    export_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Ensure RGB mode for all pages
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     if pages and not pages[0].mode == 'RGB':
         pages = [p.convert('RGB') for p in pages]
-    
-    # Handle different file formats
-    file_ext = output_path.suffix.lower()
-    file_stem = output_path.stem
-    
-    # Validate file extension
-    supported_extensions = ['.pdf', '.svg', '.jpg', '.jpeg', '.png']
-    if not file_ext:
-        raise ValueError("No file extension specified. Please save with a valid extension (.pdf, .svg, .jpg)")
-    if file_ext not in supported_extensions:
-        raise ValueError(f"Unsupported file extension: {file_ext}. Supported formats: {', '.join(supported_extensions)}")
-    
-    if file_ext == '.pdf':
-        # PDF: Save directly in export folder
-        final_path = export_dir / f"{file_stem}.pdf"
-        status_callback(f"Exporting as PDF to: {final_path}")
-        pages[0].save(final_path, "PDF", resolution=float(output_dpi), 
-                     save_all=True, append_images=pages[1:])
-        status_callback(f"PDF saved to: {final_path.resolve()}")
-        
+    status_callback(f"Salvataggio output in: {output_path.resolve()} con metadati a {output_dpi} DPI.")
+    if output_path.suffix.lower() == '.pdf':
+        pages[0].save(output_path, "PDF", resolution=float(output_dpi), save_all=True, append_images=pages[1:])
     else:
-        # SVG/JPEG: Create subfolder and save multiple files
-        subfolder = export_dir / file_stem
-        subfolder.mkdir(parents=True, exist_ok=True)
-        
-        if file_ext == '.svg':
-            status_callback(f"Exporting as SVG to folder: {subfolder}")
-            if len(pages) > 1:
-                for i, page in enumerate(pages):
-                    svg_path = subfolder / f"{file_stem}_page_{i+1}.svg"
-                    _save_page_as_svg(page, svg_path, output_dpi, status_callback)
-            else:
-                svg_path = subfolder / f"{file_stem}.svg"
-                _save_page_as_svg(pages[0], svg_path, output_dpi, status_callback)
-                
-        elif file_ext in ['.jpg', '.jpeg', '.png']:
-            status_callback(f"Exporting as {file_ext.upper()} to folder: {subfolder}")
-            if len(pages) > 1:
-                for i, page in enumerate(pages):
-                    img_path = subfolder / f"{file_stem}_page_{i+1}{file_ext}"
-                    page.save(img_path, dpi=(output_dpi, output_dpi))
-            else:
-                img_path = subfolder / f"{file_stem}{file_ext}"
-                pages[0].save(img_path, dpi=(output_dpi, output_dpi))
-        
-        status_callback(f"Files saved to folder: {subfolder.resolve()}")
-
-
-def _save_page_as_svg(page, output_path, dpi=300, status_callback=print):
-    """Save a single page as SVG format optimized for editing in Illustrator/Inkscape."""
-    try:
-        width_px, height_px = page.size
-        
-        # Use pixel dimensions for SVG to maintain exact positioning
-        # This makes it easier to edit in graphics software
-        
-        # Convert PIL image to base64 embedded data
-        buffer = io.BytesIO()
-        page.save(buffer, format='PNG')
-        img_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        
-        # Create SVG content optimized for editing
-        svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
-<svg width="{width_px}px" height="{height_px}px" 
-     viewBox="0 0 {width_px} {height_px}"
-     xmlns="http://www.w3.org/2000/svg" 
-     xmlns:xlink="http://www.w3.org/1999/xlink">
-  <title>PyPottery Layout - Editable</title>
-  <desc>Archaeological pottery catalog layout - Optimized for editing in Illustrator/Inkscape</desc>
-  
-  <!-- White background - can be changed -->
-  <rect id="background" x="0" y="0" width="{width_px}" height="{height_px}" 
-        fill="white" stroke="none"/>
-  
-  <!-- Main content group - can be ungrouped for individual object editing -->
-  <g id="pottery-layout" opacity="1">
-    <image x="0" y="0" width="{width_px}" height="{height_px}" 
-           href="data:image/png;base64,{img_data}"
-           style="image-rendering:pixelated"/>
-  </g>
-  
-  <!-- Guidelines layer (hidden by default) - enable in layers panel -->
-  <g id="guidelines" style="display:none; opacity:0.5">
-    <line x1="0" y1="{height_px//2}" x2="{width_px}" y2="{height_px//2}" 
-          stroke="#00ff00" stroke-width="1" stroke-dasharray="5,5"/>
-    <line x1="{width_px//2}" y1="0" x2="{width_px//2}" y2="{height_px}" 
-          stroke="#00ff00" stroke-width="1" stroke-dasharray="5,5"/>
-    <text x="{width_px//2}" y="20" text-anchor="middle" 
-          fill="#00ff00" font-family="Arial" font-size="12">
-      PyPottery Layout - Guidelines
-    </text>
-  </g>
-  
-</svg>'''
-        
-        # Write SVG file
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(svg_content)
-            
-        status_callback(f"Editable SVG saved: {output_path}")
-        
-    except Exception as e:
-        status_callback(f"Error saving SVG: {e}")
-        # Fallback to PNG if SVG fails
-        png_path = output_path.with_suffix('.png')
-        page.save(png_path, dpi=(dpi, dpi))
-        status_callback(f"Fallback: saved as PNG instead: {png_path}")
+        if len(pages) > 1:
+            base, ext = output_path.stem, output_path.suffix
+            for i, page in enumerate(pages):
+                page.save(output_path.with_name(f"{base}_{i+1}{ext}"), dpi=(output_dpi, output_dpi))
+        else:
+            pages[0].save(output_path, dpi=(output_dpi, output_dpi))
+    status_callback(f"File salvato in: {output_path.resolve()}")
 
 
 def run_layout_process(params, status_callback=print):
-    """Main orchestrator function that runs the complete layout process."""
     try:
         metadata = load_metadata(params.get('metadata_file', ''), status_callback)
         image_data = load_images_with_info(params.get('input_folder', ''), status_callback)
         if not image_data:
-            status_callback("No images found. Process interrupted.")
+            status_callback("Nessuna immagine trovata. Processo interrotto.")
             return
-        
-        # Hierarchical sorting
-        primary_sort = params.get('sort_by', 'alphabetical')
-        secondary_sort = params.get('sort_by_secondary', 'none')
-        image_data = sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback)
+        sort_by = params.get('sort_by', '')
+        status_callback(f"Ordinamento immagini tramite: '{sort_by or 'alfabetico'}'...")
+        if sort_by == 'random':
+            random.shuffle(image_data)
+        elif sort_by == 'natural_name':
+            image_data.sort(key=lambda d: natural_sort_key(d['name']))
+        elif sort_by and sort_by not in ['', 'alphabetical', 'random', 'natural_name'] and metadata:
+            image_data.sort(key=lambda d: (str(metadata.get(d['name'], {}).get(sort_by, 'zz_fallback')), natural_sort_key(d['name'])))
         image_data = scale_images(image_data, params.get('scale_factor', 1.0), status_callback)
         if params.get('add_caption'):
             image_data = add_captions_to_images(
@@ -573,13 +386,13 @@ def run_layout_process(params, status_callback=print):
             )
         page_dims = get_page_dimensions_px(params.get('page_size', 'A4'), params.get('custom_size'))
         final_pages = []
-        status_callback(f"Starting placement in '{params.get('mode', 'grid')}' mode...")
+        status_callback(f"Avvio posizionamento in modalità '{params.get('mode', 'grid')}'...")
         if params.get('mode') == 'grid':
             grid_size = (params.get('grid_rows', 1), params.get('grid_cols', 1))
             final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
         elif params.get('mode') == 'puzzle':
             final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
-        status_callback(f"Generated {len(final_pages)} pages.")
+        status_callback(f"Generate {len(final_pages)} pagine.")
         if params.get('add_scale_bar') and final_pages:
             if params.get('pixels_per_cm') and params.get('scale_bar_cm'):
                 scale_bar = create_scale_bar(params.get('scale_bar_cm', 5), params.get('pixels_per_cm', 100), params.get('scale_factor', 1.0), status_callback)
@@ -590,15 +403,15 @@ def run_layout_process(params, status_callback=print):
                 y_pos = page.height - params.get('margin_px', 0) - scale_bar.height
                 page.paste(scale_bar, (x_pos, y_pos), scale_bar)
         
-        # Add margin borders if requested
+        # Aggiungi cornice margini se richiesta
         if params.get('show_margin_border') and final_pages:
-            status_callback("Adding margin borders to pages...")
+            status_callback("Aggiunta cornice margini alle pagine...")
             for i, page in enumerate(final_pages):
                 final_pages[i] = draw_margin_border(page, params.get('margin_px', 0), status_callback)
         
-        status_callback(f"Saving output to '{params.get('output_file', 'output.pdf')}'...")
+        status_callback(f"Salvataggio output in '{params.get('output_file', 'output.pdf')}'...")
         save_output(final_pages, params.get('output_file', 'output.pdf'), params.get('output_dpi', 300), status_callback)
-        status_callback('--- PROCESS COMPLETED SUCCESSFULLY ---')
+        status_callback('--- PROCESSO COMPLETATO CON SUCCESSO ---')
     except Exception as e:
-        status_callback(f"--- ERROR: {e} ---")
+        status_callback(f"--- ERRORE: {e} ---")
         raise
