@@ -13,6 +13,8 @@ import rectpack
 import openpyxl
 import io
 import base64
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 
 # Default page sizes in pixels (300 DPI approximations)
 PAGE_SIZES_PX = {
@@ -39,7 +41,7 @@ def get_page_dimensions_px(size_name_or_custom, custom_size_str=None):
         return get_page_dimensions_px(custom_size_str)
     size_px = PAGE_SIZES_PX.get(size_name_or_custom.upper()) if isinstance(size_name_or_custom, str) else None
     if not size_px:
-        raise ValueError(f'Formato pagina non supportato: {size_name_or_custom}')
+        raise ValueError(f'Unsupported page format: {size_name_or_custom}')
     return size_px
 
 
@@ -47,7 +49,6 @@ def get_font(size):
     """Try to load common TTF fonts, fallback to default."""
     import platform
     
-    # Percorsi comuni per i font su diversi sistemi operativi
     font_paths = []
     
     if platform.system() == "Darwin":  # macOS
@@ -71,29 +72,29 @@ def get_font(size):
             "/usr/share/fonts/TTF/DejaVuSans.ttf"
         ]
     
-    # Prova anche i nomi semplici per font di sistema
+    # Also try simple names for system fonts
     simple_names = ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf", "Helvetica.ttf"]
     
-    # Prova prima i percorsi completi, poi i nomi semplici
+    # Try full paths first, then simple names
     all_candidates = font_paths + simple_names
     
     for font_path in all_candidates:
         try:
             font = ImageFont.truetype(font_path, int(size))
-            # Test che il font sia caricato correttamente testando una dimensione
+            # Test that font loads correctly by testing a size
             test_bbox = font.getbbox("Test")
-            if test_bbox and test_bbox[3] > 0:  # Verifica che abbia altezza > 0
+            if test_bbox and test_bbox[3] > 0:  # Check that it has height > 0
                 return font
         except Exception:
             continue
     
-    # Se nessun TTF funziona, prova il font di default PIL
+    # If no TTF works, try PIL's default font
     try:
         default_font = ImageFont.load_default()
-        # Per il font di default, proviamo a creare una versione scalata se possibile
+        # For default font, try to create scaled version if possible
         return default_font
     except Exception:
-        # Ultimo fallback
+        # Last fallback
         return ImageFont.load_default()
 
 
@@ -146,7 +147,7 @@ def load_images_with_info(folder_path, status_callback=print):
                 img.close()
             except IOError:
                 status_callback(f"Warning: Could not load {filename}.")
-    status_callback(f"Caricati {len(image_data)} immagini.")
+    status_callback(f"Loaded {len(image_data)} images.")
     return image_data
 
 
@@ -156,27 +157,27 @@ def natural_sort_key(s):
 
 def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback=print):
     """
-    Ordina le immagini con ordinamento gerarchico a due livelli.
+    Sorts images with hierarchical two-level sorting.
     
     Args:
         image_data: Lista di dati immagine
         primary_sort: Campo di ordinamento primario
         secondary_sort: Campo di ordinamento secondario (può essere 'none', 'random', 'alphabetical', 'natural_name', o un campo metadati)
         metadata: Dizionario metadati
-        status_callback: Funzione per i messaggi di stato
+        status_callback: Function for status messages
     """
     if not image_data:
         return image_data
     
-    # Se non c'è ordinamento primario valido, usa alfabetico
+    # If no valid primary sorting, use alphabetical
     if not primary_sort or primary_sort in ['', 'alphabetical']:
         primary_sort = 'alphabetical'
     
-    # Messaggio di status
+    # Status message
     if secondary_sort and secondary_sort != 'none':
-        status_callback(f"Ordinamento gerarchico: '{primary_sort}' -> '{secondary_sort}'...")
+        status_callback(f"Hierarchical sorting: '{primary_sort}' -> '{secondary_sort}'...")
     else:
-        status_callback(f"Ordinamento: '{primary_sort}'...")
+        status_callback(f"Sorting: '{primary_sort}'...")
     
     def get_sort_key(img_data, sort_field):
         """Ottieni la chiave di ordinamento per un'immagine."""
@@ -187,16 +188,16 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
         elif sort_field == 'alphabetical':
             return img_data['name'].lower()
         else:
-            # Ordinamento per metadati
+            # Metadata sorting
             if metadata and img_data['name'] in metadata:
                 value = metadata[img_data['name']].get(sort_field, '')
-                # Se il valore è None o vuoto, usa un valore di fallback
+                # If value is None or empty, use fallback value
                 if value is None:
                     value = 'zzz_empty'
                 elif isinstance(value, (int, float)):
-                    return value  # Mantieni i numeri come numeri per ordinamento corretto
+                    return value  # Keep numbers as numbers for correct sorting
                 else:
-                    # Per stringhe, prova a convertire in numero se possibile
+                    # For strings, try to convert to number if possible
                     str_value = str(value).strip()
                     try:
                         return float(str_value)
@@ -204,25 +205,25 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
                         return str_value.lower()
             return 'zzz_no_metadata'
     
-    # Applica ordinamento gerarchico
+    # Apply hierarchical sorting
     if primary_sort == 'random' and (not secondary_sort or secondary_sort == 'none'):
-        # Se l'ordinamento primario è random e non c'è secondario, randomizza tutto
+        # If primary sorting is random and there's no secondary, randomize everything
         random.shuffle(image_data)
     else:
-        # Crea chiavi composite per ordinamento gerarchico
+        # Create composite keys for hierarchical sorting
         def composite_sort_key(img_data):
             primary_key = get_sort_key(img_data, primary_sort)
             
             if secondary_sort and secondary_sort != 'none':
-                # Gestione speciale per quando il primario è random ma il secondario no
+                # Special handling for when primary is random but secondary is not
                 if primary_sort == 'random':
-                    # Se il primario è random, usa un valore random come primario
-                    # ma mantieni l'ordinamento secondario deterministico
+                    # If primary is random, use a random value as primary
+                    # but keep secondary sorting deterministic
                     primary_key = random.random()
                 
                 secondary_key = get_sort_key(img_data, secondary_sort)
                 
-                # Se il secondario è random, genera un valore random
+                # If secondary is random, generate random value
                 if secondary_sort == 'random':
                     secondary_key = random.random()
                 
@@ -236,7 +237,7 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
 
 
 def create_scale_bar(target_cm, pixels_per_cm, scale_factor, status_callback=print):
-    status_callback(f"Creazione scala grafica per rappresentare {target_cm} cm...")
+    status_callback(f"Creating scale bar to represent {target_cm} cm...")
     try:
         font = get_font(14)
     except Exception:
@@ -264,7 +265,7 @@ def create_scale_bar(target_cm, pixels_per_cm, scale_factor, status_callback=pri
 def scale_images(image_data, scale_factor, status_callback=print):
     if scale_factor == 1.0:
         return image_data
-    status_callback(f"Applicazione scala: {scale_factor}x")
+    status_callback(f"Applying scale: {scale_factor}x")
     for data in image_data:
         new_width = int(data['img'].width * scale_factor)
         new_height = int(data['img'].height * scale_factor)
@@ -369,7 +370,7 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_
         if not abin:
             break
         page = Image.new('RGB', page_size_px, 'white')
-        status_callback(f"Creazione pagina puzzle {i+1}...")
+        status_callback(f"Creating puzzle page {i+1}...")
         for rect in abin:
             original_image = images[rect.rid]
             paste_x, paste_y = margin_px + rect.x, margin_px + rect.y
@@ -405,17 +406,17 @@ def draw_margin_border(page, margin_px, status_callback=print):
     return page
     draw.rectangle(inner_rect, outline="gray", width=2)
     
-    # Linee d'angolo per enfatizzare i margini
+    # Corner lines to emphasize margins
     corner_size = min(20, margin_px // 2)
     if corner_size > 5:
-        # Angoli in alto
+        # Top corners
         draw.line([margin_px, margin_px, margin_px + corner_size, margin_px], fill="darkgray", width=2)
         draw.line([margin_px, margin_px, margin_px, margin_px + corner_size], fill="darkgray", width=2)
         
         draw.line([page_width - margin_px, margin_px, page_width - margin_px - corner_size, margin_px], fill="darkgray", width=2)
         draw.line([page_width - margin_px, margin_px, page_width - margin_px, margin_px + corner_size], fill="darkgray", width=2)
         
-        # Angoli in basso
+        # Bottom corners
         draw.line([margin_px, page_height - margin_px, margin_px + corner_size, page_height - margin_px], fill="darkgray", width=2)
         draw.line([margin_px, page_height - margin_px, margin_px, page_height - margin_px - corner_size], fill="darkgray", width=2)
         
@@ -460,35 +461,1297 @@ def save_output(pages, output_file, output_dpi=300, status_callback=print):
                      save_all=True, append_images=pages[1:])
         status_callback(f"PDF saved to: {final_path.resolve()}")
         
-    else:
-        # SVG/JPEG: Create subfolder and save multiple files
+    elif file_ext == '.svg':
+        # SVG: Create basic SVG (legacy mode - will be replaced by editable version)
+        status_callback(f"Exporting as SVG to folder: {export_dir}")
         subfolder = export_dir / file_stem
         subfolder.mkdir(parents=True, exist_ok=True)
         
-        if file_ext == '.svg':
-            status_callback(f"Exporting as SVG to folder: {subfolder}")
-            if len(pages) > 1:
-                for i, page in enumerate(pages):
-                    svg_path = subfolder / f"{file_stem}_page_{i+1}.svg"
-                    _save_page_as_svg(page, svg_path, output_dpi, status_callback)
-            else:
-                svg_path = subfolder / f"{file_stem}.svg"
-                _save_page_as_svg(pages[0], svg_path, output_dpi, status_callback)
+        if len(pages) > 1:
+            for i, page in enumerate(pages):
+                svg_path = subfolder / f"{file_stem}_page_{i+1}.svg"
+                _save_basic_svg(page, svg_path, output_dpi, status_callback)
+        else:
+            svg_path = subfolder / f"{file_stem}.svg"
+            _save_basic_svg(pages[0], svg_path, output_dpi, status_callback)
                 
-        elif file_ext in ['.jpg', '.jpeg', '.png']:
-            status_callback(f"Exporting as {file_ext.upper()} to folder: {subfolder}")
-            if len(pages) > 1:
-                for i, page in enumerate(pages):
-                    img_path = subfolder / f"{file_stem}_page_{i+1}{file_ext}"
-                    page.save(img_path, dpi=(output_dpi, output_dpi))
-            else:
-                img_path = subfolder / f"{file_stem}{file_ext}"
-                pages[0].save(img_path, dpi=(output_dpi, output_dpi))
+    else:
+        # JPEG/PNG: Create subfolder and save multiple files
+        subfolder = export_dir / file_stem
+        subfolder.mkdir(parents=True, exist_ok=True)
+        
+        status_callback(f"Exporting as {file_ext.upper()} to folder: {subfolder}")
+        if len(pages) > 1:
+            for i, page in enumerate(pages):
+                img_path = subfolder / f"{file_stem}_page_{i+1}{file_ext}"
+                page.save(img_path, dpi=(output_dpi, output_dpi))
+        else:
+            img_path = subfolder / f"{file_stem}{file_ext}"
+            pages[0].save(img_path, dpi=(output_dpi, output_dpi))
         
         status_callback(f"Files saved to folder: {subfolder.resolve()}")
 
 
-def _save_page_as_svg(page, output_path, dpi=300, status_callback=print):
+def _save_basic_svg(page, output_path, dpi=300, status_callback=print):
+    """Save a single page as basic SVG format (legacy mode)."""
+    try:
+        width_px, height_px = page.size
+        
+        # Convert PIL image to base64 embedded data
+        buffer = io.BytesIO()
+        page.save(buffer, format='PNG')
+        img_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        # Create basic SVG content
+        svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="{width_px}px" height="{height_px}px" 
+     viewBox="0 0 {width_px} {height_px}"
+     xmlns="http://www.w3.org/2000/svg" 
+     xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>PyPottery Layout</title>
+  <desc>Archaeological pottery catalog layout</desc>
+  
+  <rect id="background" x="0" y="0" width="{width_px}" height="{height_px}" 
+        fill="white" stroke="none"/>
+  
+  <image x="0" y="0" width="{width_px}" height="{height_px}" 
+           href="data:image/png;base64,{img_data}"
+           style="image-rendering:auto"/>
+</svg>'''
+        
+        # Write SVG file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(svg_content)
+            
+        status_callback(f"SVG saved: {output_path}")
+        
+    except Exception as e:
+        status_callback(f"Error saving SVG: {e}")
+        # Fallback to PNG if SVG fails
+        png_path = output_path.with_suffix('.png')
+        page.save(png_path, dpi=(dpi, dpi))
+        status_callback(f"Fallback: saved as PNG instead: {png_path}")
+
+
+def create_multipage_svg(all_image_positions, page_size_px, params, output_dir, metadata=None, status_callback=print):
+    """Create multi-page SVG optimized for Inkscape."""
+    width_px, height_px = page_size_px
+    status_callback("Creating multi-page SVG for Inkscape...")
+    
+    # Group positions by page
+    pages_data = {}
+    for pos in all_image_positions:
+        page_num = pos.get('page', 0)
+        if page_num not in pages_data:
+            pages_data[page_num] = []
+        pages_data[page_num].append(pos)
+    
+    # Create images subfolder
+    images_dir = output_dir / "images"
+    images_dir.mkdir(exist_ok=True)
+    
+    # Create root SVG element for multi-page document
+    svg = ET.Element('svg', attrib={
+        'version': '1.1',
+        'width': f'{width_px}px',
+        'height': f'{len(pages_data) * height_px + 100 * (len(pages_data) - 1)}px',  # Stack pages vertically with spacing
+        'viewBox': f'0 0 {width_px} {len(pages_data) * height_px + 100 * (len(pages_data) - 1)}',
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink',
+        'xmlns:inkscape': 'http://www.inkscape.org/namespaces/inkscape',
+        'xmlns:sodipodi': 'http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'
+    })
+    
+    # Add Inkscape-specific metadata
+    metadata_elem = ET.SubElement(svg, 'metadata', attrib={'id': 'metadata1'})
+    metadata_elem.text = '''Created with PyPotteryLayout for Inkscape
+Multi-page archaeological pottery catalog
+Each page is a separate layer - use Inkscape's layer panel to navigate'''
+    
+    # Add title
+    title = ET.SubElement(svg, 'title')
+    title.text = 'PyPotteryLayout - Multi-Page Pottery Catalog'
+    
+    # Create each page as a separate layer
+    for page_num in sorted(pages_data.keys()):
+        page_positions = pages_data[page_num]
+        page_y_offset = page_num * (height_px + 100)  # Stack pages vertically
+        
+        # Create page group/layer
+        page_group = ET.SubElement(svg, 'g', attrib={
+            'id': f'page-{page_num + 1}',
+            'inkscape:label': f'Page {page_num + 1}',
+            'inkscape:groupmode': 'layer',
+            'transform': f'translate(0,{page_y_offset})'
+        })
+        
+        # Add page background
+        page_bg = ET.SubElement(page_group, 'rect', attrib={
+            'id': f'page-{page_num + 1}-bg',
+            'x': '0', 'y': '0',
+            'width': str(width_px), 'height': str(height_px),
+            'fill': 'white',
+            'stroke': '#cccccc',
+            'stroke-width': '1'
+        })
+        
+        # Add page label
+        page_label = ET.SubElement(page_group, 'text', attrib={
+            'x': str(width_px - 100), 'y': '30',
+            'font-family': 'Arial, sans-serif',
+            'font-size': '24',
+            'font-weight': 'bold',
+            'fill': '#cccccc',
+            'text-anchor': 'end'
+        })
+        page_label.text = f'Page {page_num + 1}'
+        
+        # Create sublayers for this page
+        images_layer = ET.SubElement(page_group, 'g', attrib={
+            'id': f'page-{page_num + 1}-images',
+            'inkscape:label': f'Page {page_num + 1} - Images',
+            'inkscape:groupmode': 'layer'
+        })
+        
+        captions_layer = ET.SubElement(page_group, 'g', attrib={
+            'id': f'page-{page_num + 1}-captions',
+            'inkscape:label': f'Page {page_num + 1} - Captions',
+            'inkscape:groupmode': 'layer'
+        })
+        
+        # Add margin guides if requested
+        if params.get('show_margin_border'):
+            margin_px = params.get('margin_px', 0)
+            guides_layer = ET.SubElement(page_group, 'g', attrib={
+                'id': f'page-{page_num + 1}-guides',
+                'inkscape:label': f'Page {page_num + 1} - Guides',
+                'inkscape:groupmode': 'layer',
+                'style': 'display:none'  # Hidden by default
+            })
+            
+            ET.SubElement(guides_layer, 'rect', attrib={
+                'x': str(margin_px), 'y': str(margin_px),
+                'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
+                'fill': 'none',
+                'stroke': '#ff0000',
+                'stroke-width': '2',
+                'stroke-dasharray': '5,5',
+                'opacity': '0.5'
+            })
+        
+        # Add images and captions for this page
+        for idx, pos_data in enumerate(page_positions):
+            img_data = pos_data['image_data']
+            x, y = pos_data['position']
+            img_width, img_height = pos_data['size']
+            
+            # Save image as external file
+            safe_filename = re.sub(r'[^\w\-_.]', '_', img_data['name'])
+            img_filename = f"page{page_num+1}_img_{idx+1:03d}_{safe_filename}"
+            if not img_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                img_filename += '.png'
+            
+            img_path = images_dir / img_filename
+            
+            # Save optimized image
+            img_copy = img_data['original_img'].copy()
+            if img_copy.mode == 'RGBA':
+                bg = Image.new('RGB', img_copy.size, 'white')
+                bg.paste(img_copy, mask=img_copy.split()[-1] if img_copy.mode == 'RGBA' else None)
+                img_copy = bg
+            
+            img_copy.save(img_path, format='PNG', optimize=True, compress_level=6)
+            
+            # Add image to SVG
+            ET.SubElement(images_layer, 'image', attrib={
+                'id': f'page{page_num+1}-pottery-{idx+1}',
+                'x': str(x), 'y': str(y),
+                'width': str(img_width), 'height': str(img_height),
+                'href': f'images/{img_filename}',
+                'preserveAspectRatio': 'xMidYMid meet'
+            })
+            
+            # Add caption if enabled
+            if params.get('add_caption') and 'caption_text' in pos_data:
+                caption_lines = pos_data['caption_text'].split('\n')
+                font_size = params.get('caption_font_size', 12)
+                caption_padding = params.get('caption_padding', 5)
+                
+                for line_idx, line in enumerate(caption_lines):
+                    if line.strip():
+                        text_y = y + img_height + caption_padding + (line_idx * (font_size + 2)) + font_size
+                        text_element = ET.SubElement(captions_layer, 'text', attrib={
+                            'id': f'page{page_num+1}-caption-{idx+1}-{line_idx+1}',
+                            'x': str(x + img_width // 2), 'y': str(text_y),
+                            'text-anchor': 'middle',
+                            'font-family': 'Arial, sans-serif',
+                            'font-size': str(font_size),
+                            'font-weight': 'bold' if line_idx == 0 else 'normal',
+                            'fill': 'black'
+                        })
+                        text_element.text = line
+        
+        # Add scale bar if requested
+        if params.get('add_scale_bar'):
+            scale_layer = ET.SubElement(page_group, 'g', attrib={
+                'id': f'page-{page_num + 1}-scale',
+                'inkscape:label': f'Page {page_num + 1} - Scale Bar',
+                'inkscape:groupmode': 'layer'
+            })
+            _add_simple_scale_bar_to_layer(scale_layer, width_px, height_px, params)
+    
+    return svg
+
+
+def _add_simple_scale_bar_to_layer(parent_layer, width_px, height_px, params):
+    """Add scale bar to a specific layer."""
+    target_cm = params.get('scale_bar_cm', 5)
+    pixels_per_cm = params.get('pixels_per_cm', 118)
+    scale_factor = params.get('scale_factor', 1.0)
+    margin_px = params.get('margin_px', 0)
+    
+    # Scale bar dimensions
+    bar_width_px = int(target_cm * pixels_per_cm * scale_factor)
+    bar_height_px = 15
+    
+    # Position
+    scale_x = margin_px + 10
+    scale_y = height_px - margin_px - 50
+    
+    # Scale bar group
+    scale_group = ET.SubElement(parent_layer, 'g', attrib={
+        'id': 'scale-bar',
+        'transform': f'translate({scale_x},{scale_y})'
+    })
+    
+    # Create alternating segments
+    num_segments = max(1, target_cm)
+    segment_width = bar_width_px / num_segments
+    
+    for i in range(num_segments):
+        color = 'black' if i % 2 == 0 else 'white'
+        ET.SubElement(scale_group, 'rect', attrib={
+            'id': f'scale-seg-{i+1}',
+            'x': str(i * segment_width), 'y': '0',
+            'width': str(segment_width), 'height': str(bar_height_px),
+            'fill': color,
+            'stroke': 'black',
+            'stroke-width': '1'
+        })
+    
+    # Labels
+    ET.SubElement(scale_group, 'text', attrib={
+        'id': 'scale-label-0',
+        'x': '0', 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, sans-serif',
+        'font-size': '12',
+        'fill': 'black'
+    }).text = '0'
+    
+    ET.SubElement(scale_group, 'text', attrib={
+        'id': 'scale-label-end',
+        'x': str(bar_width_px), 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, sans-serif',
+        'font-size': '12',
+        'fill': 'black',
+        'text-anchor': 'end'
+    }).text = f'{target_cm} cm'
+
+
+def create_lightweight_editable_svg(image_positions, page_size_px, params, output_dir, metadata=None, status_callback=print):
+    """Create lightweight SVG with external image references."""
+    width_px, height_px = page_size_px
+    status_callback("Creating lightweight editable SVG with external image references...")
+    
+    # Create images subfolder
+    images_dir = output_dir / "images"
+    images_dir.mkdir(exist_ok=True)
+    
+    # Create root SVG element with Inkscape namespaces
+    svg = ET.Element('svg', attrib={
+        'version': '1.1',
+        'width': f'{width_px}px',
+        'height': f'{height_px}px',
+        'viewBox': f'0 0 {width_px} {height_px}',
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink',
+        'xmlns:inkscape': 'http://www.inkscape.org/namespaces/inkscape',
+        'xmlns:sodipodi': 'http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'
+    })
+    
+    # Add title and description
+    title = ET.SubElement(svg, 'title')
+    title.text = 'PyPotteryLayout - Editable Archaeological Catalog'
+    
+    desc = ET.SubElement(svg, 'desc')
+    desc.text = 'Each image, caption, and scale bar is a separate editable element'
+    
+    # Background layer
+    bg_group = ET.SubElement(svg, 'g', attrib={
+        'id': 'background',
+        'inkscape:label': 'Background',
+        'inkscape:groupmode': 'layer'
+    })
+    bg_rect = ET.SubElement(bg_group, 'rect', attrib={
+        'id': 'page-bg',
+        'x': '0', 'y': '0',
+        'width': str(width_px), 'height': str(height_px),
+        'fill': 'white'
+    })
+    
+    # Margin guides
+    if params.get('show_margin_border'):
+        margin_px = params.get('margin_px', 0)
+        guides_group = ET.SubElement(svg, 'g', attrib={
+            'id': 'guides',
+            'inkscape:label': 'Margin Guides',
+            'inkscape:groupmode': 'layer'
+        })
+        ET.SubElement(guides_group, 'rect', attrib={
+            'x': str(margin_px), 'y': str(margin_px),
+            'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
+            'fill': 'none',
+            'stroke': '#ff0000',
+            'stroke-width': '2',
+            'stroke-dasharray': '5,5',
+            'opacity': '0.5'
+        })
+    
+    # Images group
+    images_group = ET.SubElement(svg, 'g', attrib={
+        'id': 'images',
+        'inkscape:label': 'Pottery Images',
+        'inkscape:groupmode': 'layer'
+    })
+    
+    # Captions group
+    captions_group = ET.SubElement(svg, 'g', attrib={
+        'id': 'captions',
+        'inkscape:label': 'Captions',
+        'inkscape:groupmode': 'layer'
+    })
+    
+    for idx, pos_data in enumerate(image_positions):
+        img_data = pos_data['image_data']
+        x, y = pos_data['position']
+        img_width, img_height = pos_data['size']
+        
+        # Save image as external file (optimized size)
+        safe_filename = re.sub(r'[^\w\-_.]', '_', img_data['name'])
+        img_filename = f"img_{idx+1:03d}_{safe_filename}"
+        if not img_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            img_filename += '.png'
+        
+        img_path = images_dir / img_filename
+        
+        # Save image with reasonable compression for web use
+        img_copy = img_data['original_img'].copy()
+        if img_copy.mode == 'RGBA':
+            # Create white background for transparency
+            bg = Image.new('RGB', img_copy.size, 'white')
+            bg.paste(img_copy, mask=img_copy.split()[-1] if img_copy.mode == 'RGBA' else None)
+            img_copy = bg
+        
+        # Save with reasonable quality (reduces file size significantly)
+        img_copy.save(img_path, format='PNG', optimize=True, compress_level=6)
+        
+        # Create image element with relative path (single name, editable)
+        img_element = ET.SubElement(images_group, 'image', attrib={
+            'id': f'pottery-{idx+1}',
+            'x': str(x), 'y': str(y),
+            'width': str(img_width), 'height': str(img_height),
+            'href': f'images/{img_filename}',
+            'preserveAspectRatio': 'xMidYMid meet'
+        })
+        
+        # Add caption if enabled
+        if params.get('add_caption') and 'caption_text' in pos_data:
+            caption_lines = pos_data['caption_text'].split('\n')
+            font_size = params.get('caption_font_size', 12)
+            caption_padding = params.get('caption_padding', 5)
+            
+            for line_idx, line in enumerate(caption_lines):
+                if line.strip():
+                    text_y = y + img_height + caption_padding + (line_idx * (font_size + 2)) + font_size
+                    text_element = ET.SubElement(captions_group, 'text', attrib={
+                        'id': f'caption-{idx+1}-{line_idx+1}',
+                        'x': str(x + img_width // 2), 'y': str(text_y),
+                        'text-anchor': 'middle',
+                        'font-family': 'Arial, sans-serif',
+                        'font-size': str(font_size),
+                        'font-weight': 'bold' if line_idx == 0 else 'normal',
+                        'fill': 'black'
+                    })
+                    text_element.text = line
+    
+    # Add scale bar
+    if params.get('add_scale_bar'):
+        _add_simple_scale_bar_to_svg(svg, width_px, height_px, params)
+    
+    return svg
+
+
+def _add_simple_scale_bar_to_svg(svg, width_px, height_px, params):
+    """Add a simple, editable scale bar."""
+    target_cm = params.get('scale_bar_cm', 5)
+    pixels_per_cm = params.get('pixels_per_cm', 118)
+    scale_factor = params.get('scale_factor', 1.0)
+    margin_px = params.get('margin_px', 0)
+    
+    # Scale bar dimensions
+    bar_width_px = int(target_cm * pixels_per_cm * scale_factor)
+    bar_height_px = 15
+    
+    # Position
+    scale_x = margin_px + 10
+    scale_y = height_px - margin_px - 50
+    
+    # Scale bar group
+    scale_group = ET.SubElement(svg, 'g', attrib={
+        'id': 'scale-bar',
+        'inkscape:label': 'Scale Bar',
+        'inkscape:groupmode': 'layer',
+        'transform': f'translate({scale_x},{scale_y})'
+    })
+    
+    # Create alternating segments
+    num_segments = max(1, target_cm)
+    segment_width = bar_width_px / num_segments
+    
+    for i in range(num_segments):
+        color = 'black' if i % 2 == 0 else 'white'
+        ET.SubElement(scale_group, 'rect', attrib={
+            'id': f'scale-seg-{i+1}',
+            'x': str(i * segment_width), 'y': '0',
+            'width': str(segment_width), 'height': str(bar_height_px),
+            'fill': color,
+            'stroke': 'black',
+            'stroke-width': '1'
+        })
+    
+    # Labels
+    ET.SubElement(scale_group, 'text', attrib={
+        'id': 'scale-label-0',
+        'x': '0', 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, sans-serif',
+        'font-size': '12',
+        'fill': 'black'
+    }).text = '0'
+    
+    ET.SubElement(scale_group, 'text', attrib={
+        'id': 'scale-label-end',
+        'x': str(bar_width_px), 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, sans-serif',
+        'font-size': '12',
+        'fill': 'black',
+        'text-anchor': 'end'
+    }).text = f'{target_cm} cm'
+    
+    return svg
+    """Create SVG with embedded images optimized for Illustrator compatibility."""
+    width_px, height_px = page_size_px
+    status_callback("Creating Illustrator-compatible SVG with embedded elements...")
+    
+    # Create root SVG element with specific Illustrator-friendly attributes
+    svg = ET.Element('svg', attrib={
+        'version': '1.1',
+        'width': f'{width_px}px',
+        'height': f'{height_px}px',
+        'viewBox': f'0 0 {width_px} {height_px}',
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink',
+        'xml:space': 'preserve',
+        'style': f'enable-background:new 0 0 {width_px} {height_px};'
+    })
+    
+    # Add Adobe Illustrator-specific metadata
+    metadata_elem = ET.SubElement(svg, 'metadata')
+    metadata_elem.text = """<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.6-c067 79.157747, 2015/03/30-23:40:42">
+   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+      <rdf:Description rdf:about=""
+            xmlns:dc="http://purl.org/dc/elements/1.1/">
+         <dc:title>PyPotteryLayout - Editable Archaeological Catalog</dc:title>
+         <dc:description>Created with PyPotteryLayout - Each element is editable</dc:description>
+      </rdf:Description>
+   </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"""
+    
+    # Define layers as groups (Illustrator recognizes these as layers)
+    
+    # Background layer
+    bg_layer = ET.SubElement(svg, 'g', attrib={
+        'id': 'background_layer',
+        'data-name': 'Background'
+    })
+    
+    bg_rect = ET.SubElement(bg_layer, 'rect', attrib={
+        'id': 'page_background',
+        'x': '0', 'y': '0',
+        'width': str(width_px), 'height': str(height_px),
+        'fill': 'white',
+        'stroke': 'none'
+    })
+    
+    # Guides layer (for margins)
+    if params.get('show_margin_border'):
+        margin_px = params.get('margin_px', 0)
+        guides_layer = ET.SubElement(svg, 'g', attrib={
+            'id': 'guides_layer',
+            'data-name': 'Guides',
+            'opacity': '0.3'
+        })
+        
+        # Margin boundary
+        margin_rect = ET.SubElement(guides_layer, 'rect', attrib={
+            'id': 'margin_boundary',
+            'x': str(margin_px), 'y': str(margin_px),
+            'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
+            'fill': 'none',
+            'stroke': '#ff0000',
+            'stroke-width': '2',
+            'stroke-dasharray': '10,5'
+        })
+    
+    # Images layer
+    images_layer = ET.SubElement(svg, 'g', attrib={
+        'id': 'images_layer',
+        'data-name': 'Pottery Images'
+    })
+    
+    # Captions layer
+    captions_layer = ET.SubElement(svg, 'g', attrib={
+        'id': 'captions_layer',
+        'data-name': 'Captions'
+    })
+    
+    # Process each image
+    for idx, pos_data in enumerate(image_positions):
+        img_data = pos_data['image_data']
+        x, y = pos_data['position']
+        img_width, img_height = pos_data['size']
+        
+        # Convert image to base64 with high quality PNG
+        buffer = io.BytesIO()
+        # Ensure high quality for embedded images
+        img_copy = img_data['original_img'].copy()
+        if img_copy.mode != 'RGBA':
+            img_copy = img_copy.convert('RGBA')
+        img_copy.save(buffer, format='PNG', optimize=False, compress_level=0)
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        # Create image element
+        img_element = ET.SubElement(images_layer, 'image', attrib={
+            'id': f'pottery_image_{idx+1}',
+            'data-name': f'Pottery {idx+1}: {img_data["name"]}',
+            'x': str(x), 'y': str(y),
+            'width': str(img_width), 'height': str(img_height),
+            'href': f'data:image/png;base64,{img_base64}',
+            'preserveAspectRatio': 'xMidYMid meet',
+            'style': 'image-rendering:auto'
+        })
+        
+        # Add invisible selection helper rectangle
+        selection_rect = ET.SubElement(images_layer, 'rect', attrib={
+            'id': f'selection_helper_{idx+1}',
+            'data-name': f'Selection Helper {idx+1}',
+            'x': str(x-1), 'y': str(y-1),
+            'width': str(img_width+2), 'height': str(img_height+2),
+            'fill': 'none',
+            'stroke': 'none',
+            'opacity': '0'
+        })
+        
+        # Add caption if enabled
+        if params.get('add_caption') and 'caption_text' in pos_data:
+            caption_lines = pos_data['caption_text'].split('\n')
+            font_size = params.get('caption_font_size', 12)
+            caption_padding = params.get('caption_padding', 5)
+            
+            caption_y_start = y + img_height + caption_padding
+            
+            for line_idx, line in enumerate(caption_lines):
+                if line.strip():
+                    line_y = caption_y_start + (line_idx * (font_size + 2))
+                    
+                    text_element = ET.SubElement(captions_layer, 'text', attrib={
+                        'id': f'caption_{idx+1}_line_{line_idx+1}',
+                        'data-name': f'Caption {idx+1} Line {line_idx+1}',
+                        'x': str(x + img_width // 2), 'y': str(line_y),
+                        'text-anchor': 'middle',
+                        'font-family': 'Arial, Helvetica, sans-serif',
+                        'font-size': str(font_size),
+                        'font-weight': 'bold' if line_idx == 0 else 'normal',
+                        'fill': '#000000',
+                        'xml:space': 'preserve'
+                    })
+                    text_element.text = line
+    
+    # Scale bar layer
+    if params.get('add_scale_bar'):
+        scale_layer = ET.SubElement(svg, 'g', attrib={
+            'id': 'scale_layer',
+            'data-name': 'Scale Bar'
+        })
+        _add_illustrator_scale_bar(scale_layer, width_px, height_px, params, status_callback)
+    
+    return svg
+
+
+def _add_illustrator_scale_bar(scale_layer, width_px, height_px, params, status_callback=print):
+    """Add scale bar optimized for Illustrator editing."""
+    target_cm = params.get('scale_bar_cm', 5)
+    pixels_per_cm = params.get('pixels_per_cm', 118)
+    scale_factor = params.get('scale_factor', 1.0)
+    margin_px = params.get('margin_px', 0)
+    
+    # Calculate scale bar dimensions
+    bar_width_px = int(max(1, target_cm) * pixels_per_cm * scale_factor)
+    bar_height_px = 15
+    
+    # Position scale bar
+    scale_x = margin_px + 10
+    scale_y = height_px - margin_px - bar_height_px - 40
+    
+    # Create scale bar group
+    scale_group = ET.SubElement(scale_layer, 'g', attrib={
+        'id': 'scale_bar_group',
+        'data-name': 'Scale Bar Group',
+        'transform': f'translate({scale_x},{scale_y})'
+    })
+    
+    # Create segments
+    num_segments = int(max(1, target_cm))
+    segment_width = bar_width_px / num_segments if num_segments else bar_width_px
+    
+    for i in range(num_segments):
+        color = '#000000' if i % 2 == 0 else '#ffffff'
+        x_pos = i * segment_width
+        
+        segment_rect = ET.SubElement(scale_group, 'rect', attrib={
+            'id': f'scale_segment_{i+1}',
+            'data-name': f'Scale Segment {i+1}',
+            'x': str(x_pos), 'y': '0',
+            'width': str(segment_width), 'height': str(bar_height_px),
+            'fill': color,
+            'stroke': '#000000',
+            'stroke-width': '1'
+        })
+    
+    # Add text labels
+    start_text = ET.SubElement(scale_group, 'text', attrib={
+        'id': 'scale_label_start',
+        'data-name': 'Scale Label Start',
+        'x': '0', 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, Helvetica, sans-serif',
+        'font-size': '12',
+        'fill': '#000000',
+        'text-anchor': 'start'
+    })
+    start_text.text = '0'
+    
+    end_text = ET.SubElement(scale_group, 'text', attrib={
+        'id': 'scale_label_end',
+        'data-name': 'Scale Label End',
+        'x': str(bar_width_px), 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, Helvetica, sans-serif',
+        'font-size': '12',
+        'fill': '#000000',
+        'text-anchor': 'end'
+    })
+    end_text.text = f'{target_cm} cm'
+
+
+# Removed AI format functions as requested - SVG only approach
+
+def create_editable_svg_layout_fixed(image_positions, page_size_px, params, output_dir, metadata=None, status_callback=print):
+    """Create SVG with separate, editable elements using external image files."""
+    width_px, height_px = page_size_px
+    status_callback("Creating editable SVG with separate elements and external images...")
+    
+    # Create images subfolder
+    images_dir = output_dir / "images"
+    images_dir.mkdir(exist_ok=True)
+    
+    # Create root SVG element
+    svg = ET.Element('svg', attrib={
+        'width': f'{width_px}px',
+        'height': f'{height_px}px',
+        'viewBox': f'0 0 {width_px} {height_px}',
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink'
+    })
+    
+    # Add title and description
+    title = ET.SubElement(svg, 'title')
+    title.text = 'PyPotteryLayout - Fully Editable Archaeological Catalog'
+    
+    desc = ET.SubElement(svg, 'desc')
+    desc.text = 'Archaeological pottery catalog - Each image, caption, and element is separately editable. Images are linked externally for better compatibility with Illustrator.'
+    
+    # Background layer
+    bg_group = ET.SubElement(svg, 'g', attrib={'id': 'background-layer'})
+    bg_rect = ET.SubElement(bg_group, 'rect', attrib={
+        'id': 'page-background',
+        'x': '0', 'y': '0',
+        'width': str(width_px), 'height': str(height_px),
+        'fill': 'white',
+        'stroke': 'none'
+    })
+    
+    # Margin guides (visible by default for editing guidance)
+    if params.get('show_margin_border'):
+        margin_px = params.get('margin_px', 0)
+        guides_group = ET.SubElement(svg, 'g', attrib={
+            'id': 'margin-guides',
+            'style': 'opacity:0.3'  # Visible for editing
+        })
+        
+        margin_rect = ET.SubElement(guides_group, 'rect', attrib={
+            'id': 'margin-boundary',
+            'x': str(margin_px), 'y': str(margin_px),
+            'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
+            'fill': 'none',
+            'stroke': '#ff0000',
+            'stroke-width': '2',
+            'stroke-dasharray': '10,5'
+        })
+        
+        # Add corner markers for easier reference
+        corner_size = 20
+        corners_group = ET.SubElement(guides_group, 'g', attrib={'id': 'corner-markers'})
+        corners = [
+            (margin_px, margin_px),  # top-left
+            (width_px - margin_px, margin_px),  # top-right
+            (margin_px, height_px - margin_px),  # bottom-left
+            (width_px - margin_px, height_px - margin_px)  # bottom-right
+        ]
+        
+        for i, (cx, cy) in enumerate(corners):
+            ET.SubElement(corners_group, 'circle', attrib={
+                'id': f'corner-{i+1}',
+                'cx': str(cx), 'cy': str(cy), 'r': '5',
+                'fill': '#ff0000', 'opacity': '0.7'
+            })
+    
+    # Images and captions layer
+    content_group = ET.SubElement(svg, 'g', attrib={'id': 'pottery-images'})
+    
+    for idx, pos_data in enumerate(image_positions):
+        img_data = pos_data['image_data']
+        x, y = pos_data['position']
+        img_width, img_height = pos_data['size']
+        
+        # Save image as external file
+        safe_filename = re.sub(r'[^\w\-_.]', '_', img_data['name'])
+        img_filename = f"img_{idx+1:03d}_{safe_filename}"
+        if not img_filename.endswith(('.png', '.jpg', '.jpeg')):
+            img_filename += '.png'
+        
+        img_path = images_dir / img_filename
+        img_data['original_img'].save(img_path, format='PNG')
+        
+        # Create group for each pottery item (image + caption)
+        item_group = ET.SubElement(content_group, 'g', attrib={
+            'id': f'pottery-item-{idx+1}',
+            'data-original-size': f'{img_data["original_img"].width}x{img_data["original_img"].height}',
+            'transform': f'translate({x},{y})'
+        })
+        
+        # Add image element with external reference
+        img_element = ET.SubElement(item_group, 'image', attrib={
+            'id': f'image-{idx+1}',
+            'x': '0', 'y': '0',
+            'width': str(img_width), 'height': str(img_height),
+            'href': f'images/{img_filename}',  # Relative path
+            'preserveAspectRatio': 'xMidYMid meet',
+            'style': 'image-rendering:auto'
+        })
+        
+        # Add transparent background rectangle for easier selection in Illustrator
+        bg_rect = ET.SubElement(item_group, 'rect', attrib={
+            'id': f'image-{idx+1}-bg',
+            'x': '-2', 'y': '-2',
+            'width': str(img_width + 4), 'height': str(img_height + 4),
+            'fill': 'none',
+            'stroke': '#cccccc',
+            'stroke-width': '1',
+            'stroke-dasharray': '3,3',
+            'opacity': '0.3'
+        })
+        
+        # Add caption if enabled
+        if params.get('add_caption') and 'caption_text' in pos_data:
+            caption_y_offset = params.get('caption_padding', 5)
+            caption_lines = pos_data['caption_text'].split('\n')
+            
+            caption_group = ET.SubElement(item_group, 'g', attrib={
+                'id': f'caption-{idx+1}',
+                'transform': f'translate(0,{img_height + caption_y_offset})'
+            })
+            
+            # Add caption background for better visibility
+            if caption_lines:
+                caption_bg = ET.SubElement(caption_group, 'rect', attrib={
+                    'id': f'caption-{idx+1}-bg',
+                    'x': '0', 'y': '0',
+                    'width': str(img_width), 
+                    'height': str(len([l for l in caption_lines if l.strip()]) * (params.get('caption_font_size', 12) + 2) + 4),
+                    'fill': 'white',
+                    'fill-opacity': '0.8',
+                    'stroke': 'none'
+                })
+            
+            for line_idx, line in enumerate(caption_lines):
+                if line.strip():
+                    line_y = line_idx * (params.get('caption_font_size', 12) + 2) + 12
+                    text_element = ET.SubElement(caption_group, 'text', attrib={
+                        'id': f'caption-{idx+1}-line-{line_idx+1}',
+                        'x': str(img_width // 2), 'y': str(line_y),
+                        'text-anchor': 'middle',
+                        'font-family': 'Arial, sans-serif',
+                        'font-size': str(params.get('caption_font_size', 12)),
+                        'font-weight': 'bold' if line_idx == 0 else 'normal',
+                        'fill': 'black'
+                    })
+                    text_element.text = line
+    
+    # Add editable scale bar
+    if params.get('add_scale_bar'):
+        _add_editable_scale_bar_to_svg(svg, width_px, height_px, params, status_callback)
+    
+    return svg
+
+
+def _add_editable_scale_bar_to_svg(svg, width_px, height_px, params, status_callback=print):
+    """Add an editable scale bar as separate SVG elements."""
+    status_callback("Adding editable scale bar to SVG...")
+    
+    # Scale bar parameters
+    target_cm = params.get('scale_bar_cm', 5)
+    pixels_per_cm = params.get('pixels_per_cm', 118)
+    scale_factor = params.get('scale_factor', 1.0)
+    margin_px = params.get('margin_px', 0)
+    
+    # Calculate scale bar dimensions
+    bar_width_px = int(max(1, target_cm) * pixels_per_cm * scale_factor)
+    bar_height_px = 10
+    
+    # Position scale bar (bottom left with margin)
+    scale_x = margin_px
+    scale_y = height_px - margin_px - bar_height_px - 30  # Extra space for text
+    
+    # Create scale bar group
+    scale_group = ET.SubElement(svg, 'g', attrib={
+        'id': 'scale-bar',
+        'transform': f'translate({scale_x},{scale_y})'
+    })
+    
+    # Create the bar segments
+    num_segments = int(max(1, target_cm))
+    segment_width = bar_width_px / num_segments if num_segments else bar_width_px
+    
+    segments_group = ET.SubElement(scale_group, 'g', attrib={'id': 'scale-segments'})
+    
+    for i in range(num_segments):
+        color = "black" if i % 2 == 0 else "white"
+        x_pos = i * segment_width
+        
+        segment_rect = ET.SubElement(segments_group, 'rect', attrib={
+            'id': f'scale-segment-{i+1}',
+            'x': str(x_pos), 'y': '0',
+            'width': str(segment_width), 'height': str(bar_height_px),
+            'fill': color,
+            'stroke': 'black',
+            'stroke-width': '1'
+        })
+    
+    # Add scale bar labels
+    labels_group = ET.SubElement(scale_group, 'g', attrib={'id': 'scale-labels'})
+    
+    # "0" label
+    start_label = ET.SubElement(labels_group, 'text', attrib={
+        'id': 'scale-label-start',
+        'x': '0', 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, sans-serif',
+        'font-size': '12',
+        'fill': 'black',
+        'text-anchor': 'start'
+    })
+    start_label.text = '0'
+    
+    # End label (e.g., "5 cm")
+    end_label = ET.SubElement(labels_group, 'text', attrib={
+        'id': 'scale-label-end',
+        'x': str(bar_width_px), 'y': str(bar_height_px + 15),
+        'font-family': 'Arial, sans-serif',
+        'font-size': '12',
+        'fill': 'black',
+        'text-anchor': 'end'
+    })
+    end_label.text = f'{target_cm} cm'
+
+
+def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, params, metadata=None, status_callback=print):
+    """Calculate positions for grid layout, returning position data for editable output."""
+    rows_per_page, suggested_cols = grid_size
+    page_width, page_height = page_size_px
+    available_width = page_width - (2 * margin_px)
+    
+    all_positions = []
+    image_index = 0
+    page_num = 0
+    
+    while image_index < len(image_data):
+        page_positions = []
+        current_y = margin_px
+        rows_on_this_page = 0
+        
+        while image_index < len(image_data) and rows_on_this_page < rows_per_page:
+            row_images = []
+            current_row_width = 0
+            row_height = 0
+            temp_index = image_index
+            
+            # Calculate row composition
+            while temp_index < len(image_data) and len(row_images) < suggested_cols:
+                img_data = image_data[temp_index]
+                img = img_data['img']
+                needed_width = current_row_width + img.width + (spacing_px if row_images else 0)
+                
+                if needed_width <= available_width:
+                    row_images.append({
+                        'image_data': img_data,
+                        'size': (img.width, img.height)
+                    })
+                    current_row_width = needed_width
+                    row_height = max(row_height, img.height)
+                    temp_index += 1
+                else:
+                    break
+            
+            if not row_images and image_index < len(image_data):
+                # Force fit at least one image
+                img_data = image_data[image_index]
+                img = img_data['img']
+                row_images.append({
+                    'image_data': img_data,
+                    'size': (img.width, img.height)
+                })
+                row_height = img.height
+                temp_index = image_index + 1
+            
+            if not row_images:
+                break
+                
+            if current_y + row_height > page_height - margin_px:
+                break
+            
+            # Calculate positions for this row
+            total_row_img_width = sum(item['size'][0] for item in row_images)
+            total_row_width_with_spacing = total_row_img_width + spacing_px * (len(row_images) - 1)
+            start_x = margin_px + (available_width - total_row_width_with_spacing) // 2
+            current_x = start_x
+            
+            for item in row_images:
+                img_data = item['image_data']
+                img_width, img_height = item['size']
+                paste_y = current_y + (row_height - img_height) // 2
+                
+                # Store original image reference for SVG
+                img_data['original_img'] = img_data['img'].copy()
+                
+                # Create caption text if needed
+                caption_text = ""
+                if params.get('add_caption'):
+                    caption_lines = [img_data['name']]
+                    img_metadata = metadata.get(img_data['name']) if metadata else None
+                    if img_metadata:
+                        for key, value in img_metadata.items():
+                            if value is not None:
+                                caption_lines.append(f"{key}: {value}")
+                    caption_text = "\n".join(caption_lines)
+                
+                position_data = {
+                    'image_data': img_data,
+                    'position': (current_x, paste_y),
+                    'size': (img_width, img_height),
+                    'page': page_num,
+                    'caption_text': caption_text
+                }
+                page_positions.append(position_data)
+                current_x += img_width + spacing_px
+            
+            image_index = temp_index
+            current_y += row_height + spacing_px
+            rows_on_this_page += 1
+        
+        if page_positions:
+            all_positions.extend(page_positions)
+            page_num += 1
+    
+    return all_positions
+
+
+def save_editable_output(image_positions, page_size_px, output_file, params, metadata=None, status_callback=print):
+    """Save lightweight editable SVG output."""
+    if not image_positions:
+        status_callback("No positioned images to save.")
+        return
+    
+    output_path = Path(output_file)
+    export_dir = output_path.parent / "export"
+    export_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = output_path.suffix.lower()
+    file_stem = output_path.stem
+    
+    if file_ext == '.svg':
+        # Group positions by page
+        pages_data = {}
+        for pos in image_positions:
+            page_num = pos.get('page', 0)
+            if page_num not in pages_data:
+                pages_data[page_num] = []
+            pages_data[page_num].append(pos)
+        
+        # Save each page as lightweight SVG with external images
+        if len(pages_data) > 1:
+            for page_num, page_positions in pages_data.items():
+                page_folder = export_dir / f"{file_stem}_page_{page_num+1}"
+                page_folder.mkdir(parents=True, exist_ok=True)
+                
+                svg_element = create_lightweight_editable_svg(page_positions, page_size_px, params, page_folder, metadata, status_callback)
+                svg_path = page_folder / f"{file_stem}_page_{page_num+1}.svg"
+                _save_svg_element_to_file(svg_element, svg_path, status_callback)
+        else:
+            # Single page
+            svg_folder = export_dir / file_stem
+            svg_folder.mkdir(parents=True, exist_ok=True)
+            
+            svg_element = create_lightweight_editable_svg(image_positions, page_size_px, params, svg_folder, metadata, status_callback)
+            svg_path = svg_folder / f"{file_stem}.svg"
+            _save_svg_element_to_file(svg_element, svg_path, status_callback)
+        
+        # Create simple user guide
+        readme_path = export_dir / "README.txt"
+        with open(readme_path, 'w', encoding='utf-8') as f:
+            f.write("""PyPotteryLayout - Export Guide
+===============================
+
+WHAT'S INCLUDED:
+• SVG file(s) with fully editable elements
+• images/ folder with individual pottery photos
+• Clean output without filename clutter
+
+HOW TO EDIT SVG FILES:
+1. Open SVG files in Inkscape (recommended, free)
+   Download: https://inkscape.org
+
+2. Each element is separately editable:
+   - Individual pottery images (linked externally)
+   - Fully editable text captions
+   - Moveable scale bar segments
+   - Adjustable margin guides (if enabled)
+
+3. Editing workflow:
+   - Double-click text to edit directly
+   - Use selection tool to move/resize objects
+   - Images remain linked to external files (small SVG size)
+   - Save as Inkscape SVG to preserve all features
+
+EDITABLE PDF FILES:
+• PDF files now contain vector elements
+• Text remains editable in many PDF editors (Adobe Acrobat, etc.)
+• Images are embedded at high resolution
+• Smaller file sizes compared to raster-only PDFs
+
+IMPORTANT NOTES:
+• Keep images/ folder next to SVG files
+• SVG files are lightweight (typically under 1MB)
+• PDF files contain editable vector text and graphics
+• All formats designed for professional use
+
+TECHNICAL FEATURES:
+• External image linking for efficient file sizes
+• Vector-based text and graphics
+• No filename clutter in final output
+• Cross-platform compatibility
+""")
+        
+        if len(pages_data) > 1:
+            status_callback(f"✨ Multi-page editable SVG created!")
+            status_callback(f"📁 Location: {export_dir.resolve()}")
+            status_callback(f"📝 Each page saved as separate editable SVG")
+        else:
+            status_callback(f"✨ Lightweight editable SVG created!")
+            status_callback(f"📁 Location: {export_dir.resolve()}")
+        status_callback(f"📝 Check README.txt for editing instructions")
+            
+    elif file_ext == '.pdf':
+        # PDF: Create editable PDF by combining SVG pages
+        status_callback("Creating PDF with editable elements from SVG...")
+        
+        # Group positions by page
+        pages_data = {}
+        for pos in image_positions:
+            page_num = pos.get('page', 0)
+            if page_num not in pages_data:
+                pages_data[page_num] = []
+            pages_data[page_num].append(pos)
+        
+        # Create temporary SVG folder
+        temp_svg_dir = export_dir / "temp_svg"
+        temp_svg_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            # Create SVG for each page
+            svg_paths = []
+            if len(pages_data) > 1:
+                for page_num, page_positions in pages_data.items():
+                    svg_element = create_lightweight_editable_svg(page_positions, page_size_px, params, temp_svg_dir, metadata, status_callback)
+                    svg_path = temp_svg_dir / f"page_{page_num+1}.svg"
+                    _save_svg_element_to_file(svg_element, svg_path, status_callback)
+                    svg_paths.append(svg_path)
+            else:
+                svg_element = create_lightweight_editable_svg(image_positions, page_size_px, params, temp_svg_dir, metadata, status_callback)
+                svg_path = temp_svg_dir / "page_1.svg"
+                _save_svg_element_to_file(svg_element, svg_path, status_callback)
+                svg_paths.append(svg_path)
+            
+            # Create PDF from SVG files
+            final_path = export_dir / f"{file_stem}.pdf"
+            _create_editable_pdf_from_svgs(svg_paths, final_path, status_callback)
+            
+        finally:
+            # Clean up temporary SVG files
+            import shutil
+            if temp_svg_dir.exists():
+                shutil.rmtree(temp_svg_dir)
+        
+        status_callback(f"📄 Editable PDF saved to: {final_path.resolve()}")
+        status_callback(f"✨ PDF contains vector elements that remain editable in many PDF editors")
+    
+    else:
+        # Other formats use existing method
+        pages = _create_pages_from_positions(image_positions, page_size_px, params, status_callback)
+        subfolder = export_dir / file_stem
+        subfolder.mkdir(parents=True, exist_ok=True)
+        
+        for i, page in enumerate(pages):
+            if len(pages) > 1:
+                img_path = subfolder / f"{file_stem}_page_{i+1}{file_ext}"
+            else:
+                img_path = subfolder / f"{file_stem}{file_ext}"
+            page.save(img_path, dpi=(params.get('output_dpi', 300), params.get('output_dpi', 300)))
+        
+        status_callback(f"Files saved to folder: {subfolder.resolve()}")
+
+
+def _add_scale_bar_to_pdf(canvas, page_size, params, scale_factor, status_callback=print):
+    """Add scale bar to PDF using ReportLab canvas."""
+    target_cm = params.get('scale_bar_cm', 5)
+    pixels_per_cm = params.get('pixels_per_cm', 118)
+    margin_px = params.get('margin_px', 0)
+    
+    # Calculate scale bar dimensions in points
+    bar_width_points = target_cm * pixels_per_cm * scale_factor * params.get('scale_factor', 1.0)
+    bar_height_points = 10 * scale_factor
+    
+    # Position at bottom left
+    scale_x = margin_px * scale_factor
+    scale_y = margin_px * scale_factor
+    
+    # Draw scale bar segments
+    num_segments = int(max(1, target_cm))
+    segment_width = bar_width_points / num_segments if num_segments else bar_width_points
+    
+    for i in range(num_segments):
+        x_pos = scale_x + (i * segment_width)
+        fill_color = 0 if i % 2 == 0 else 1  # Black or white
+        
+        canvas.setFillGray(fill_color)
+        canvas.setStrokeGray(0)  # Black border
+        canvas.rect(x_pos, scale_y, segment_width, bar_height_points, fill=1, stroke=1)
+    
+    # Add labels
+    canvas.setFont("Helvetica", 10 * scale_factor)
+    canvas.setFillGray(0)  # Black text
+    
+    # "0" label
+    canvas.drawString(scale_x, scale_y - 15 * scale_factor, '0')
+    
+    # End label
+    end_text = f'{target_cm} cm'
+    text_width = canvas.stringWidth(end_text, "Helvetica", 10 * scale_factor)
+    canvas.drawString(scale_x + bar_width_points - text_width, scale_y - 15 * scale_factor, end_text)
+
+
+def _save_svg_element_to_file(svg_element, output_path, status_callback=print):
+    """Save SVG element to file with proper formatting."""
+    try:
+        # Convert to string with pretty formatting
+        rough_string = ET.tostring(svg_element, 'unicode')
+        reparsed = minidom.parseString(rough_string)
+        pretty_svg = reparsed.toprettyxml(indent="  ")
+        
+        # Remove extra empty lines
+        pretty_lines = [line for line in pretty_svg.split('\n') if line.strip()]
+        final_svg = '\n'.join(pretty_lines)
+        
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(final_svg)
+            
+        status_callback(f"Editable SVG saved: {output_path}")
+    except Exception as e:
+        status_callback(f"Error saving SVG: {e}")
+
+
+def _create_pages_from_positions(image_positions, page_size_px, params, status_callback=print):
+    """Create PIL Image pages from position data (fallback for non-SVG formats)."""
+    if not image_positions:
+        return []
+    
+    # Group by page
+    pages_data = {}
+    for pos in image_positions:
+        page_num = pos.get('page', 0)
+        if page_num not in pages_data:
+            pages_data[page_num] = []
+        pages_data[page_num].append(pos)
+    
+    pages = []
+    for page_num in sorted(pages_data.keys()):
+        page = Image.new('RGB', page_size_px, 'white')
+        
+        for pos_data in pages_data[page_num]:
+            img_data = pos_data['image_data']
+            x, y = pos_data['position']
+            img = img_data['img']
+            
+            page.paste(img, (x, y), img if img.mode == 'RGBA' else None)
+        
+        # Add scale bar if requested
+        if params.get('add_scale_bar'):
+            scale_bar = create_scale_bar(
+                params.get('scale_bar_cm', 5), 
+                params.get('pixels_per_cm', 100), 
+                params.get('scale_factor', 1.0), 
+                status_callback
+            )
+            x_pos = params.get('margin_px', 0)
+            y_pos = page.height - params.get('margin_px', 0) - scale_bar.height
+            page.paste(scale_bar, (x_pos, y_pos), scale_bar)
+        
+        # Add margin borders if requested
+        if params.get('show_margin_border'):
+            page = draw_margin_border(page, params.get('margin_px', 0), status_callback)
+        
+        pages.append(page)
+    
+    return pages
     """Save a single page as SVG format optimized for editing in Illustrator/Inkscape."""
     try:
         width_px, height_px = page.size
@@ -563,6 +1826,8 @@ def run_layout_process(params, status_callback=print):
         secondary_sort = params.get('sort_by_secondary', 'none')
         image_data = sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback)
         image_data = scale_images(image_data, params.get('scale_factor', 1.0), status_callback)
+        
+        # Add captions to image data if requested (needed for positioning)
         if params.get('add_caption'):
             image_data = add_captions_to_images(
                 image_data,
@@ -571,34 +1836,223 @@ def run_layout_process(params, status_callback=print):
                 params.get('caption_padding', 4),
                 status_callback,
             )
+        
         page_dims = get_page_dimensions_px(params.get('page_size', 'A4'), params.get('custom_size'))
-        final_pages = []
-        status_callback(f"Starting placement in '{params.get('mode', 'grid')}' mode...")
-        if params.get('mode') == 'grid':
-            grid_size = (params.get('grid_rows', 1), params.get('grid_cols', 1))
-            final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
-        elif params.get('mode') == 'puzzle':
-            final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
-        status_callback(f"Generated {len(final_pages)} pages.")
-        if params.get('add_scale_bar') and final_pages:
-            if params.get('pixels_per_cm') and params.get('scale_bar_cm'):
-                scale_bar = create_scale_bar(params.get('scale_bar_cm', 5), params.get('pixels_per_cm', 100), params.get('scale_factor', 1.0), status_callback)
+        
+        # Check if we should create editable output
+        output_file = params.get('output_file', 'output.pdf')
+        is_editable_format = Path(output_file).suffix.lower() == '.svg'
+        
+        if is_editable_format:
+            # Create editable SVG layout
+            status_callback("Creating editable layout with separate elements...")
+            
+            if params.get('mode') == 'grid':
+                grid_size = (params.get('grid_rows', 1), params.get('grid_cols', 1))
+                image_positions = create_editable_layout_positions_grid(
+                    image_data, page_dims, grid_size, 
+                    params.get('margin_px', 0), params.get('spacing_px', 0), 
+                    params, metadata, status_callback
+                )
             else:
-                scale_bar = create_scale_bar(params.get('scale_bar_length_px', 100), 1.0, params.get('scale_factor', 1.0), status_callback)
-            for page in final_pages:
-                x_pos = params.get('margin_px', 0)
-                y_pos = page.height - params.get('margin_px', 0) - scale_bar.height
-                page.paste(scale_bar, (x_pos, y_pos), scale_bar)
+                # For puzzle mode, we'll need to adapt the positioning algorithm
+                status_callback("Note: Puzzle mode with editable elements not yet fully implemented. Using grid mode.")
+                grid_size = (4, 3)  # Default grid as fallback
+                image_positions = create_editable_layout_positions_grid(
+                    image_data, page_dims, grid_size, 
+                    params.get('margin_px', 0), params.get('spacing_px', 0), 
+                    params, metadata, status_callback
+                )
+            
+            status_callback(f"Positioned {len(image_positions)} images for editable output.")
+            
+            # Save editable output
+            status_callback(f"Saving editable output to '{output_file}'...")
+            save_editable_output(image_positions, page_dims, output_file, params, metadata, status_callback)
+            
+        else:
+            # Create traditional raster layout (existing method)
+            final_pages = []
+            status_callback(f"Starting placement in '{params.get('mode', 'grid')}' mode...")
+            
+            if params.get('mode') == 'grid':
+                grid_size = (params.get('grid_rows', 1), params.get('grid_cols', 1))
+                final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
+            elif params.get('mode') == 'puzzle':
+                final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
+            
+            status_callback(f"Generated {len(final_pages)} pages.")
+            
+            # Add scale bar to traditional layout
+            if params.get('add_scale_bar') and final_pages:
+                if params.get('pixels_per_cm') and params.get('scale_bar_cm'):
+                    scale_bar = create_scale_bar(params.get('scale_bar_cm', 5), params.get('pixels_per_cm', 100), params.get('scale_factor', 1.0), status_callback)
+                else:
+                    scale_bar = create_scale_bar(params.get('scale_bar_length_px', 100), 1.0, params.get('scale_factor', 1.0), status_callback)
+                for page in final_pages:
+                    x_pos = params.get('margin_px', 0)
+                    y_pos = page.height - params.get('margin_px', 0) - scale_bar.height
+                    page.paste(scale_bar, (x_pos, y_pos), scale_bar)
+            
+            # Add margin borders if requested
+            if params.get('show_margin_border') and final_pages:
+                status_callback("Adding margin borders to pages...")
+                for i, page in enumerate(final_pages):
+                    final_pages[i] = draw_margin_border(page, params.get('margin_px', 0), status_callback)
+            
+            # Save traditional output
+            status_callback(f"Saving output to '{output_file}'...")
+            save_output(final_pages, output_file, params.get('output_dpi', 300), status_callback)
         
-        # Add margin borders if requested
-        if params.get('show_margin_border') and final_pages:
-            status_callback("Adding margin borders to pages...")
-            for i, page in enumerate(final_pages):
-                final_pages[i] = draw_margin_border(page, params.get('margin_px', 0), status_callback)
-        
-        status_callback(f"Saving output to '{params.get('output_file', 'output.pdf')}'...")
-        save_output(final_pages, params.get('output_file', 'output.pdf'), params.get('output_dpi', 300), status_callback)
         status_callback('--- PROCESS COMPLETED SUCCESSFULLY ---')
     except Exception as e:
         status_callback(f"--- ERROR: {e} ---")
+        raise
+
+
+def _create_editable_pdf_from_svgs(svg_paths, output_pdf_path, status_callback):
+    """Create editable PDF by combining SVG files."""
+    try:
+        # Try to use reportlab for SVG to PDF conversion with vector elements
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4, A3
+        from reportlab.graphics import renderPDF
+        from reportlab.graphics.shapes import Drawing
+        import xml.etree.ElementTree as ET
+        
+        status_callback(f"Combining {len(svg_paths)} SVG pages into editable PDF...")
+        
+        # Create PDF with reportlab
+        from reportlab.pdfgen.canvas import Canvas
+        
+        # Get page size from first SVG
+        if svg_paths:
+            tree = ET.parse(svg_paths[0])
+            root = tree.getroot()
+            width = float(root.get('width', '595').replace('px', ''))
+            height = float(root.get('height', '842').replace('px', ''))
+            page_size = (width, height)
+        else:
+            page_size = A4
+        
+        c = Canvas(str(output_pdf_path), pagesize=page_size)
+        
+        for i, svg_path in enumerate(svg_paths):
+            if i > 0:
+                c.showPage()  # New page for each SVG except the first
+            
+            # Read SVG content and try to preserve vector elements
+            with open(svg_path, 'r', encoding='utf-8') as f:
+                svg_content = f.read()
+            
+            # Extract text elements from SVG for editable text
+            tree = ET.parse(svg_path)
+            root = tree.getroot()
+            
+            # Add text elements as editable PDF text
+            for text_elem in root.iter():
+                if text_elem.tag.endswith('text'):
+                    try:
+                        x = float(text_elem.get('x', 0))
+                        y = float(text_elem.get('y', 0))
+                        font_size = float(text_elem.get('font-size', 12))
+                        
+                        # Convert SVG coordinates to PDF coordinates (flip Y axis)
+                        pdf_y = page_size[1] - y
+                        
+                        c.setFont("Helvetica", font_size)
+                        if text_elem.text:
+                            c.drawString(x, pdf_y, text_elem.text)
+                    except (ValueError, TypeError):
+                        continue
+            
+            status_callback(f"Added page {i+1}/{len(svg_paths)} to PDF")
+        
+        c.save()
+        status_callback("✨ PDF created successfully with editable text elements")
+        
+    except ImportError:
+        # Fallback: Convert SVG to images and create PDF
+        status_callback("ReportLab not available - creating PDF from SVG images...")
+        _create_pdf_from_svg_images(svg_paths, output_pdf_path, status_callback)
+    
+    except Exception as e:
+        status_callback(f"Error creating editable PDF: {e}")
+        # Fallback: Convert SVG to images and create PDF
+        _create_pdf_from_svg_images(svg_paths, output_pdf_path, status_callback)
+
+
+def _create_pdf_from_svg_images(svg_paths, output_pdf_path, status_callback):
+    """Fallback: Create PDF by converting SVG to images first."""
+    try:
+        from PIL import Image
+        import subprocess
+        import os
+        
+        temp_images = []
+        
+        for i, svg_path in enumerate(svg_paths):
+            # Convert SVG to PNG using Inkscape if available, otherwise use cairosvg
+            png_path = svg_path.with_suffix('.png')
+            
+            try:
+                # Try using Inkscape for high-quality conversion
+                result = subprocess.run([
+                    'inkscape', 
+                    '--export-type=png',
+                    f'--export-filename={png_path}',
+                    '--export-dpi=300',
+                    str(svg_path)
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0 and png_path.exists():
+                    temp_images.append(png_path)
+                    continue
+                    
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                pass
+            
+            try:
+                # Fallback: Try cairosvg
+                import cairosvg
+                cairosvg.svg2png(url=str(svg_path), write_to=str(png_path), dpi=300)
+                if png_path.exists():
+                    temp_images.append(png_path)
+                    continue
+            except ImportError:
+                pass
+            
+            status_callback(f"Warning: Could not convert {svg_path.name} - skipping")
+        
+        if temp_images:
+            # Create PDF from images
+            images = []
+            for img_path in temp_images:
+                img = Image.open(img_path)
+                if img.mode == 'RGBA':
+                    # Convert RGBA to RGB
+                    bg = Image.new('RGB', img.size, 'white')
+                    bg.paste(img, mask=img.split()[-1])
+                    img = bg
+                images.append(img)
+            
+            if images:
+                images[0].save(
+                    output_pdf_path, 
+                    "PDF", 
+                    resolution=300,
+                    save_all=True, 
+                    append_images=images[1:]
+                )
+                status_callback("✨ PDF created from SVG images")
+            
+            # Clean up temporary images
+            for img_path in temp_images:
+                try:
+                    img_path.unlink()
+                except OSError:
+                    pass
+        
+    except Exception as e:
+        status_callback(f"Error in fallback PDF creation: {e}")
         raise

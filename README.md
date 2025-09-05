@@ -1,189 +1,135 @@
 # PyPotteryLayout
+
+<div align="center">
+
+<img src="imgs/LogoLayout.png" width="500"/>
+
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/lrncrd/PyPotteryLayout)
+
 Create artefacts table effortless
 
-<br>
+</div>
 
-**Archaeological Pottery Cataloging System**
 
-A professional tool for creating layouts of archaeological pottery images with advanced hierarchical sorting, metadata integration, and multiple export formats.
+## Introduction
 
-## Features
+Producing publication-quality catalogues of archaeological artefacts is often a time-consuming process, requiring both precision in presentation and consistency across large datasets. **PyPotteryLayout** is designed to streamline this workflow by combining automation with professional publishing standards.
 
-### 🏺 **Professional Archaeological Focus**
-- Designed specifically for pottery and artifact cataloging
-- Support for inventory numbers and artifact metadata
-- Professional export formats (PNG, JPG, PDF, SVG)
+Instead of manually arranging artefact images, adjusting captions, and aligning scale bars, researchers can generate layouts in minutes while retaining full control over the final output. The software produces clean, publication-ready figures that meet the expectations of academic journals, site reports, and edited volumes. Its vector-based exports (SVG) ensure that images, scale bars, and captions remain sharp and editable at any stage of the editorial process.
 
-### 📊 **Advanced Hierarchical Sorting**
-- **Two-level sorting system**: Primary and secondary sort criteria
-- **Primary sorting**: Metadata fields, alphabetical, random, natural ordering
-- **Secondary sorting**: None, metadata fields, alphabetical, random, natural ordering
-- **Natural ordering**: Smart sorting for inventory numbers (e.g., "Item1", "Item2", "Item10")
-- **Random sorting**: For blind study layouts
+This efficiency makes the tool particularly valuable for projects with large assemblages, where hundreds of objects must be documented quickly without sacrificing visual quality. At the same time, the flexibility of SVG editing allows archaeologists and illustrators to refine details, translate captions, or adjust layouts for specific publication styles.
 
-### 🖼️ **Flexible Layout Modes**
-- **Grid Layout**: Organize images in regular rows and columns
-- **Puzzle Mode**: Optimize space usage with intelligent packing
 
-### 🎨 **Visual Enhancements**
-- **Margin borders**: Visualize page margins with frame overlay
-- **Scale bars**: Configurable scale bars with pixels-per-cm control
-- **Captions**: Automatic image labeling with metadata
-- **Font control**: Adjustable caption font sizes
+## 🏺 Features
 
-### 🔧 **Professional Controls**
-- **Manual scale entry**: Type exact scale values or use slider
-- **DPI control**: Fixed at 300 DPI for publication quality
-- **Metadata integration**: Excel (.xlsx) and CSV support
-- **Multi-page output**: Automatic page generation for large datasets
+### Core Functionality
+- **Automatic Layout Generation**: Grid-based and optimized puzzle layouts
+- **Multi-Format Export**: SVG, PDF and JPG
+- **Effortless Output**: Quick export with minimal clicks
+- **Metadata Integration**: Excel/CSV metadata support for captions and sorting
+- **Flexible Sorting**: Multiple sorting options including custom metadata fields
 
-### 📤 **Export Formats**
-- **PNG**: High-quality raster images
-- **JPG**: Compressed raster format
-- **PDF**: Multi-page document format
-- **SVG**: Vector format for scalable graphics
+### Advanced Layout Options
+- **Grid Layout**: Customizable rows and columns with precise control
+- **Puzzle Layout**: Optimized space utilization algorithm
+- **Scale Bars**: Automatic generation with customizable measurements
+- **Caption System**: Editable text with metadata integration
+- **Margin Management**: Professional borders and spacing controls
 
-## Installation
+## 🚀 Quick Start
 
-1. **Clone or download** the project files
-2. **Install Python dependencies**:
-   ```bash
-   pip install Pillow openpyxl rectpack
-   ```
-3. **Run the application**:
-   ```bash
-   python gui_app.py
-   ```
+### Download & Run (Windows)
 
-## Usage
+<div align="center">
+
+<img src="imgs/icon_app.png" width="250"/>
+
+</div>
+
+1. Download `PyPotteryLayout.exe` from [Releases](../../releases)
+2. Run directly - no installation required
+3. Select image folder and configure layout
+4. Export as SVG or PDF
+
+### From Source
+```bash
+# Clone repository
+git clone https://github.com/lrncrd/PyPotteryLayout.git
+cd PyPotteryLayout
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run application
+python gui_app.py
+```
+
+## 📋 System Requirements
+
+- **Python**: 3.11+ (if running from source)
+- **Operating System**: Windows 10+ (executable), Windows/macOS/Linux (source)
+- **Memory**: 2GB+ RAM recommended for large image sets
+- **Dependencies**: PIL/Pillow, tkinter, openpyxl
+
+## 🎯 Usage Guide
 
 ### Basic Workflow
+1. **Select Images**: Choose folder containing pottery images
+2. **Configure Layout**: Set grid dimensions or use puzzle optimization
+3. **Add Metadata**: Optional Excel file with captions and sorting data
+4. **Customize Output**: Scale, margins, captions, scale bars
+5. **Export**: Choose SVG for editing or PDF for publication
 
-1. **Select Images Folder**: Choose folder containing your pottery images
-2. **Choose Export Format**: PNG, JPG, PDF, or SVG
-3. **Select Output File**: Where to save the final layout
-4. **Optional**: Load metadata Excel file for enhanced sorting and captions
+### Metadata Format
 
-### Layout Configuration
+Excel/CSV files should have:
+- First column: Image filenames (with extensions)
+- Additional columns: Custom data for captions and sorting
 
-- **Mode**: Choose Grid or Puzzle layout
-- **Page Format**: A4 or A3
-- **Primary Sorting**: How to order images initially
-- **Secondary Sorting**: How to order within primary groups
-
-### Visual Settings
-
-- **Image Scale**: Manual entry + slider control (0.1x to 3.0x)
-- **Page Margins**: Spacing around page edges
-- **Show Margin Border**: Visual frame to see margins
-- **Image Spacing**: Gap between images
-
-### Additional Features
-
-- **Add Captions**: Label images with filenames/metadata
-- **Font Size**: Adjustable caption text size
-- **Add Scale Bar**: Reference scale for measurements
-- **Pixels per cm**: Calibrate scale bar accuracy
-
-## Metadata Format
-
-Create an Excel file (.xlsx) with:
-- **Column A**: Image filename (with extension)
-- **Column B+**: Any metadata fields (e.g., "Type", "Period", "Inventory_Number")
-
-Example:
 ```
-Filename        | Type    | Period  | Inventory_Number
-0001.jpg        | Bowl    | Roman   | INV-001
-0002.jpg        | Jar     | Roman   | INV-002
-0003.jpg        | Bowl    | Medieval| INV-010
+Filename    | Site     | Period  | Description
+IMG001.jpg  | Site A   | Roman   | Storage jar
+IMG002.jpg  | Site B   | Medieval| Bowl fragment
 ```
 
-## Hierarchical Sorting Examples
 
-### Example 1: Type → Inventory Number
-- **Primary**: "Type" (metadata field)
-- **Secondary**: "Inventory_Number" (metadata field)
-- **Result**: All bowls together, then jars, with inventory numbers in order within each group
+## 🔧 Advanced Features
 
-### Example 2: Period → Random
-- **Primary**: "Period" (metadata field) 
-- **Secondary**: "random"
-- **Result**: Items grouped by period, but random order within each period (useful for blind studies)
+### SVG Editing Workflow
+1. Export as SVG format
+2. Open in Inkscape (free, recommended) or Illustrator
+3. Edit text, move objects, adjust colors
+4. Keep `images/` folder next to SVG file
+5. All elements remain fully editable
 
-### Example 3: Natural Name Sorting
-- **Primary**: "natural_name"
-- **Result**: Smart sorting of filenames like "Item1.jpg", "Item2.jpg", "Item10.jpg" in correct numerical order
 
-## Technical Details
+## 📊 Recent Updates
 
-### File Support
-- **Images**: JPG, PNG, TIFF, BMP, GIF
-- **Metadata**: Excel (.xlsx), CSV
-- **Output**: PNG, JPG, PDF, SVG
+### v0.1.0 (Latest)
+- First public release with core features
 
-### System Requirements
-- **Python**: 3.7+
-- **Platform**: macOS, Windows, Linux
-- **Memory**: Sufficient for loading all images simultaneously
+## 🎯 Future Plans
 
-### Font Handling
-- Automatic font discovery across platforms
-- macOS: System fonts in `/System/Library/Fonts/`
-- Cross-platform fallbacks ensure consistent rendering
+- [] Improving SVG export
+- [] Add Table numbering options
+- [] Add usage examples
 
-## Advanced Features
+If you have suggestions or need help, please open an issue on GitHub!
 
-### SVG Export
-- Vector format for infinite scalability
-- Embedded high-quality raster images
-- Professional metadata in SVG headers
-- Fallback to PNG if SVG export fails
 
-### Margin Visualization
-- Optional border overlay shows exactly where margins are
-- Helps with layout planning and print preparation
-- Light gray outer border, gray inner content area
 
-### Scale Bar Calibration
-- Configure pixels-per-cm for accurate measurements
-- Scale bars automatically adjust for image scaling
-- Essential for archaeological documentation
 
-## Troubleshooting
 
-### Common Issues
 
-1. **"No images found"**: Check that image folder contains supported formats
-2. **Font sizing not working**: Verify system fonts are accessible
-3. **Metadata not loading**: Ensure Excel file has proper column structure
-4. **SVG export fails**: Will automatically fallback to PNG format
 
-### Performance Tips
+## 👥 Contributors
 
-- For large image sets, use lower scale factors
-- Puzzle mode may be slower than Grid mode for many images
-- Close other applications if running low on memory
+<a href="https://github.com/lrncrd/PyPotteryLayout/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=lrncrd/PyPotteryLayout" />
+</a>
 
-## Version History
 
-### v1.0 (Current)
-- Complete English translation
-- Professional header with app branding
-- SVG export support
-- Hierarchical sorting system
-- Margin border visualization
-- Manual scale controls
-- Fixed 300 DPI output
-- Archaeological workflow optimization
 
-## Credits
-
-Developed for archaeological pottery cataloging and documentation workflows.
-
-**Technologies**: Python, Pillow (PIL), tkinter, openpyxl, rectpack
-
-**License**: See LICENSE file
-
----
-
+Developed with ❤️ by [Lorenzo Cardarelli](https://github.com/lrncrd)

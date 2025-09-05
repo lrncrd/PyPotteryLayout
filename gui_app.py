@@ -19,6 +19,18 @@ class LayoutApp(tk.Tk):
         self.title("PyPotteryLayout - Create artefacts table effortlessly")
         self.geometry("800x600")
         self.resizable(True, True)
+        
+        # Set window icon
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "imgs", "icon_app.png")
+            if os.path.exists(icon_path):
+                # Load icon for window title bar
+                icon_image = Image.open(icon_path)
+                # Convert to ICO format for window icon (Windows specific)
+                self.window_icon = ImageTk.PhotoImage(icon_image)
+                self.iconphoto(True, self.window_icon)
+        except Exception:
+            pass  # Continue without window icon if loading fails
 
         # State variables for widgets
         self.vars = {
@@ -98,7 +110,7 @@ class LayoutApp(tk.Tk):
         self._create_details_widgets(details_frame)
         
         # --- Export Button ---
-        self.run_button = ttk.Button(main_frame, text="🏺 Export Layout", command=self._start_process)
+        self.run_button = ttk.Button(main_frame, text="Export Layout", command=self._start_process)
         self.run_button.pack(pady=15, fill=X, ipady=8)
 
         # --- Status Log ---
@@ -118,10 +130,22 @@ class LayoutApp(tk.Tk):
         
         # Try to load icon, fallback to text if not found
         try:
-            # You can replace this with your actual icon path
-            icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 24))
-            icon_label.pack()
-        except:
+            # Load the actual icon from imgs folder
+            icon_path = os.path.join(os.path.dirname(__file__), "imgs", "icon_app.png")
+            if os.path.exists(icon_path):
+                # Load and resize the icon
+                icon_image = Image.open(icon_path)
+                # Resize to 32x32 pixels for the header
+                icon_image = icon_image.resize((32, 32), Image.Resampling.LANCZOS)
+                self.icon_photo = ImageTk.PhotoImage(icon_image)
+                icon_label = ttk.Label(icon_frame, image=self.icon_photo)
+                icon_label.pack()
+            else:
+                # Fallback to emoji if icon file not found
+                icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 24))
+                icon_label.pack()
+        except Exception as e:
+            # Fallback to emoji if any error occurs
             icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 24))
             icon_label.pack()
         
@@ -315,6 +339,17 @@ class LayoutApp(tk.Tk):
         output_path = Path(current_output)
         new_path = output_path.with_suffix(new_ext)
         self.vars['output_file'].set(str(new_path))
+        
+        # Show info about editable formats
+        if format_value == "SVG":
+            self._update_log("✨ SVG Export: Creates lightweight, fully editable files!")
+            self._update_log("   • Small file sizes (images linked externally)")
+            self._update_log("   • Each element is separately editable")
+            self._update_log("   • Compatible with all vector editors")
+        elif format_value == "PDF":
+            self._update_log("📄 PDF Export: Creates final publication-ready files")
+            self._update_log("   • High-quality immutable output")
+            self._update_log("   • Perfect for printing and distribution")
 
     def _update_sort_options(self):
         metadata_file = self.vars['metadata_file'].get()
