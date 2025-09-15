@@ -5,7 +5,7 @@
 <img src="imgs/LogoLayout.png" width="500"/>
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE) 
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/lrncrd/PyPotteryLayout)
 
 Create artefacts table effortless
@@ -112,9 +112,9 @@ IMG002.jpg  | Site B   | Medieval| Bowl fragment
 
 ## 🎯 Future Plans
 
-- [] Improving SVG export
-- [] Add Table numbering options
-- [] Add usage examples
+* [ ] Improving SVG export
+* [ ] Add Table numbering options
+* [ ] Add usage examples
 
 If you have suggestions or need help, please open an issue on GitHub!
 
