@@ -379,11 +379,107 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_
     return pages
 
 
+def place_images_manual(image_data, page_size_px, margin_px, manual_positions, scale_factor, status_callback=print):
+    """Place images based on manual drag-and-drop positions."""
+    page_width, page_height = page_size_px
+    pages = []
+    current_page = Image.new('RGB', page_size_px, 'white')
+
+    status_callback("Creating manual layout from user-defined positions...")
+
+    # Scale positions from preview to actual size
+    preview_scale = 0.2  # This should match the preview scale in GUI
+    actual_scale = 1.0 / preview_scale
+
+    for idx, data in enumerate(image_data):
+        if idx in manual_positions:
+            # Get position from manual layout
+            x, y, w, h = manual_positions[idx]
+
+            # Scale positions to actual page size
+            actual_x = int(x * actual_scale)
+            actual_y = int(y * actual_scale)
+
+            # Get the actual image
+            img = data['img']
+
+            # Paste image at manual position
+            try:
+                current_page.paste(img, (actual_x, actual_y), img if img.mode == 'RGBA' else None)
+                status_callback(f"Placed image {idx+1} at manual position ({actual_x}, {actual_y})")
+            except Exception as e:
+                status_callback(f"Warning: Could not place image {idx+1}: {e}")
+
+    pages.append(current_page)
+    return pages
+
+
+def place_images_masonry(image_data, page_size_px, margin_px, spacing_px, columns=3, status_callback=print):
+    """Place images in masonry layout (Pinterest-style vertical columns)."""
+    page_width, page_height = page_size_px
+    available_width = page_width - (2 * margin_px)
+    col_width = (available_width - (columns - 1) * spacing_px) // columns
+
+    pages = []
+    current_page = Image.new('RGB', page_size_px, 'white')
+
+    # Track height for each column
+    column_heights = [margin_px] * columns
+    page_num = 1
+
+    status_callback(f"Creating masonry layout with {columns} columns...")
+
+    for idx, data in enumerate(image_data):
+        img = data['img']
+
+        # Scale image to fit column width while maintaining aspect ratio
+        aspect_ratio = img.height / img.width
+        new_width = col_width
+        new_height = int(new_width * aspect_ratio)
+
+        # Resize image if needed
+        if img.width != new_width:
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Find column with minimum height
+        min_col_idx = column_heights.index(min(column_heights))
+
+        # Check if image fits on current page
+        if column_heights[min_col_idx] + new_height + margin_px > page_height:
+            # Check if any column has space
+            if all(h + new_height + margin_px > page_height for h in column_heights):
+                # Start new page
+                pages.append(current_page)
+                current_page = Image.new('RGB', page_size_px, 'white')
+                column_heights = [margin_px] * columns
+                page_num += 1
+                status_callback(f"Starting masonry page {page_num}...")
+                min_col_idx = 0
+
+        # Calculate position
+        x = margin_px + min_col_idx * (col_width + spacing_px)
+        y = column_heights[min_col_idx]
+
+        # Paste image
+        current_page.paste(img, (x, y), img if img.mode == 'RGBA' else None)
+
+        # Update column height
+        column_heights[min_col_idx] = y + new_height + spacing_px
+
+        status_callback(f"Placed image {idx+1} of {len(image_data)} in column {min_col_idx+1}")
+
+    # Add last page if it has content
+    if any(h > margin_px for h in column_heights):
+        pages.append(current_page)
+
+    return pages
+
+
 def draw_margin_border(page, margin_px, status_callback=print):
     """Draw a border frame to visualize page margins."""
     if margin_px <= 0:
         return page
-    
+
     status_callback("Adding margin borders...")
     draw = ImageDraw.Draw(page)
     
@@ -1880,7 +1976,13 @@ def run_layout_process(params, status_callback=print):
                 final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
             elif params.get('mode') == 'puzzle':
                 final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
-            
+            elif params.get('mode') == 'masonry':
+                columns = params.get('grid_cols', 3)  # Use grid_cols for masonry columns
+                final_pages = place_images_masonry(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, status_callback)
+            elif params.get('mode') == 'manual':
+                manual_positions = params.get('manual_positions', {})
+                final_pages = place_images_manual(image_data, page_dims, params.get('margin_px', 0), manual_positions, params.get('scale_factor', 1.0), status_callback)
+
             status_callback(f"Generated {len(final_pages)} pages.")
             
             # Add scale bar to traditional layout
