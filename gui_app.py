@@ -64,6 +64,12 @@ class LayoutApp(tk.Tk):
         self.preview_update_pending = False
         self.preview_update_timer = None
 
+        # Manual layout variables
+        self.manual_positions = {}  # Store manual positions for images
+        self.dragging_item = None
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+
         self._create_widgets()
         self._update_ui_for_mode() # Set initial state
         self._update_sort_options() # Set initial sort options
@@ -265,6 +271,7 @@ class LayoutApp(tk.Tk):
         ttk.Radiobutton(mode_frame, text="Grid Layout", variable=self.vars['mode'], value="grid", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
         ttk.Radiobutton(mode_frame, text="Puzzle (Optimized)", variable=self.vars['mode'], value="puzzle", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
         ttk.Radiobutton(mode_frame, text="Masonry Layout", variable=self.vars['mode'], value="masonry", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
+        ttk.Radiobutton(mode_frame, text="Manual (Drag & Drop)", variable=self.vars['mode'], value="manual", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
 
         # Page settings
         page_frame = ttk.Labelframe(main_frame, text="Page Settings", padding="10")
@@ -433,7 +440,12 @@ class LayoutApp(tk.Tk):
 
     def _update_ui_for_mode(self):
         # Grid controls are now in the preview controls section
-        pass
+        mode = self.vars['mode'].get()
+        if mode == "manual":
+            self._update_log("[INFO] Manual mode: Drag images in preview to position them", "info")
+            self._enable_manual_mode()
+        else:
+            self._disable_manual_mode()
 
     def _on_scale_change(self, value):
         """Callback when scale slider changes."""
@@ -538,6 +550,10 @@ class LayoutApp(tk.Tk):
 
     def _run_backend_in_thread(self, params):
         try:
+            # Add manual positions if in manual mode
+            if params['mode'] == 'manual' and self.manual_positions:
+                params['manual_positions'] = self.manual_positions
+
             backend_logic.run_layout_process(params, self._update_log)
             messagebox.showinfo("Success", f"Process completed!\nFile saved to:\n{params['output_file']}")
         except Exception as e:
@@ -730,6 +746,8 @@ class LayoutApp(tk.Tk):
             self._preview_puzzle_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
         elif mode == "masonry":
             self._preview_masonry_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
+        elif mode == "manual":
+            self._preview_manual_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
 
         # Update scroll region
         self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
@@ -843,6 +861,121 @@ class LayoutApp(tk.Tk):
 
                 # Update column height
                 col_heights[min_col] = y + img_height + spacing
+
+    def _preview_manual_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
+        """Preview manual layout with drag-and-drop functionality."""
+        # Initialize positions if empty
+        if not self.manual_positions:
+            # Place images in a simple grid initially
+            x = margin
+            y = margin
+            for idx, (path, img) in enumerate(self.preview_images):
+                img_width = int(img.width * scale_factor * preview_scale)
+                img_height = int(img.height * scale_factor * preview_scale)
+
+                if x + img_width > canvas_width - margin:
+                    x = margin
+                    y += 100 * preview_scale + spacing
+
+                self.manual_positions[idx] = (x, y, img_width, img_height)
+                x += img_width + spacing
+
+        # Draw images at their manual positions
+        for idx, (path, img) in enumerate(self.preview_images):
+            if idx in self.manual_positions:
+                x, y, w, h = self.manual_positions[idx]
+
+                # Create draggable rectangle
+                rect_id = self.preview_canvas.create_rectangle(
+                    x, y, x + w, y + h,
+                    fill="lightgreen", outline="darkgreen", width=2,
+                    tags=(f"image_{idx}", "draggable")
+                )
+
+                # Add image number
+                text_id = self.preview_canvas.create_text(
+                    x + w/2, y + h/2,
+                    text=f"{idx + 1}",
+                    font=("Arial", int(10 * preview_scale * 5)),
+                    tags=(f"image_{idx}", "draggable")
+                )
+
+    def _enable_manual_mode(self):
+        """Enable drag-and-drop functionality in preview canvas."""
+        self.preview_canvas.bind("<Button-1>", self._on_drag_start)
+        self.preview_canvas.bind("<B1-Motion>", self._on_drag_motion)
+        self.preview_canvas.bind("<ButtonRelease-1>", self._on_drag_release)
+        self.preview_canvas.config(cursor="hand2")
+
+    def _disable_manual_mode(self):
+        """Disable drag-and-drop functionality."""
+        self.preview_canvas.unbind("<Button-1>")
+        self.preview_canvas.unbind("<B1-Motion>")
+        self.preview_canvas.unbind("<ButtonRelease-1>")
+        self.preview_canvas.config(cursor="")
+
+    def _on_drag_start(self, event):
+        """Handle drag start for manual positioning."""
+        # Find which item was clicked
+        x = self.preview_canvas.canvasx(event.x)
+        y = self.preview_canvas.canvasy(event.y)
+
+        # Get the closest item with "draggable" tag
+        item = self.preview_canvas.find_closest(x, y)[0]
+        tags = self.preview_canvas.gettags(item)
+
+        if "draggable" in tags:
+            self.dragging_item = item
+            self.drag_start_x = x
+            self.drag_start_y = y
+
+            # Find image index from tags
+            for tag in tags:
+                if tag.startswith("image_"):
+                    self.dragging_index = int(tag.split("_")[1])
+                    break
+
+    def _on_drag_motion(self, event):
+        """Handle drag motion for manual positioning."""
+        if self.dragging_item:
+            x = self.preview_canvas.canvasx(event.x)
+            y = self.preview_canvas.canvasy(event.y)
+
+            dx = x - self.drag_start_x
+            dy = y - self.drag_start_y
+
+            # Move all items with the same image tag
+            tags = self.preview_canvas.gettags(self.dragging_item)
+            for tag in tags:
+                if tag.startswith("image_"):
+                    items = self.preview_canvas.find_withtag(tag)
+                    for item in items:
+                        self.preview_canvas.move(item, dx, dy)
+                    break
+
+            self.drag_start_x = x
+            self.drag_start_y = y
+
+    def _on_drag_release(self, event):
+        """Handle drag release for manual positioning."""
+        if self.dragging_item and hasattr(self, 'dragging_index'):
+            # Get the new position of the dragged item
+            tags = self.preview_canvas.gettags(self.dragging_item)
+            for tag in tags:
+                if tag.startswith("image_"):
+                    # Find all items with this tag and get the rectangle bounds
+                    items = self.preview_canvas.find_withtag(tag)
+                    for item in items:
+                        if self.preview_canvas.type(item) == "rectangle":
+                            x1, y1, x2, y2 = self.preview_canvas.coords(item)
+                            # Update stored position
+                            self.manual_positions[self.dragging_index] = (x1, y1, x2-x1, y2-y1)
+                            break
+                    break
+
+            self.dragging_item = None
+            delattr(self, 'dragging_index')
+            self._update_log(f"[INFO] Image {self.dragging_index + 1 if hasattr(self, 'dragging_index') else '?'} repositioned", "info")
 
     def _browse_input_folder(self):
         folder = filedialog.askdirectory(title="Select Images Folder")

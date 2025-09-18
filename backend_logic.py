@@ -379,6 +379,41 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_
     return pages
 
 
+def place_images_manual(image_data, page_size_px, margin_px, manual_positions, scale_factor, status_callback=print):
+    """Place images based on manual drag-and-drop positions."""
+    page_width, page_height = page_size_px
+    pages = []
+    current_page = Image.new('RGB', page_size_px, 'white')
+
+    status_callback("Creating manual layout from user-defined positions...")
+
+    # Scale positions from preview to actual size
+    preview_scale = 0.2  # This should match the preview scale in GUI
+    actual_scale = 1.0 / preview_scale
+
+    for idx, data in enumerate(image_data):
+        if idx in manual_positions:
+            # Get position from manual layout
+            x, y, w, h = manual_positions[idx]
+
+            # Scale positions to actual page size
+            actual_x = int(x * actual_scale)
+            actual_y = int(y * actual_scale)
+
+            # Get the actual image
+            img = data['img']
+
+            # Paste image at manual position
+            try:
+                current_page.paste(img, (actual_x, actual_y), img if img.mode == 'RGBA' else None)
+                status_callback(f"Placed image {idx+1} at manual position ({actual_x}, {actual_y})")
+            except Exception as e:
+                status_callback(f"Warning: Could not place image {idx+1}: {e}")
+
+    pages.append(current_page)
+    return pages
+
+
 def place_images_masonry(image_data, page_size_px, margin_px, spacing_px, columns=3, status_callback=print):
     """Place images in masonry layout (Pinterest-style vertical columns)."""
     page_width, page_height = page_size_px
@@ -1944,7 +1979,10 @@ def run_layout_process(params, status_callback=print):
             elif params.get('mode') == 'masonry':
                 columns = params.get('grid_cols', 3)  # Use grid_cols for masonry columns
                 final_pages = place_images_masonry(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, status_callback)
-            
+            elif params.get('mode') == 'manual':
+                manual_positions = params.get('manual_positions', {})
+                final_pages = place_images_manual(image_data, page_dims, params.get('margin_px', 0), manual_positions, params.get('scale_factor', 1.0), status_callback)
+
             status_callback(f"Generated {len(final_pages)} pages.")
             
             # Add scale bar to traditional layout
