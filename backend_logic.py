@@ -306,15 +306,26 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
     available_width = page_width - (2 * margin_px)
+    available_height = page_height - (2 * margin_px)
     pages, image_index = [], 0
+    total_images = len(image_data)
+    
+    status_callback(f"Starting grid layout: {total_images} images to place")
     while image_index < len(image_data):
         current_page = Image.new('RGB', page_size_px, 'white')
-        current_y = margin_px
         page_has_images = False
-        rows_on_this_page = 0
-        while image_index < len(image_data) and rows_on_this_page < rows_per_page:
+        
+        # Collect all rows for this page first to calculate total height
+        page_rows = []
+        temp_image_index = image_index
+        temp_rows_on_page = 0
+        
+        # First pass: collect all rows and calculate dimensions
+        while temp_image_index < len(image_data) and temp_rows_on_page < rows_per_page:
             row_images, current_row_width, row_height = [], 0, 0
-            temp_index = image_index
+            temp_index = temp_image_index
+            
+            # Build the row
             while temp_index < len(image_data) and len(row_images) < suggested_cols:
                 img = image_data[temp_index]['img']
                 needed_width = current_row_width + img.width + (spacing_px if row_images else 0)
@@ -325,39 +336,124 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                     temp_index += 1
                 else:
                     break
-            if not row_images and image_index < len(image_data):
-                row_images.append(image_data[image_index])
-                row_height = image_data[image_index]['img'].height
-                temp_index = image_index + 1
+            
+            # Force at least one image per row if possible
+            if not row_images and temp_image_index < len(image_data):
+                row_images.append(image_data[temp_image_index])
+                row_height = image_data[temp_image_index]['img'].height
+                temp_index = temp_image_index + 1
+            
             if not row_images:
                 break
+                
+            page_rows.append((row_images, row_height))
+            temp_image_index = temp_index
+            temp_rows_on_page += 1
+        
+        if not page_rows:
+            # No rows could be created, break
+            if image_index < len(image_data):
+                status_callback("WARNING: Remaining images may be too large.")
+            break
+        
+        # Calculate total content height
+        total_content_height = sum(row_height for _, row_height in page_rows)
+        total_spacing_height = spacing_px * (len(page_rows) - 1) if len(page_rows) > 1 else 0
+        total_height_needed = total_content_height + total_spacing_height
+        
+        # Calculate starting Y position to center content vertically
+        if total_height_needed < available_height:
+            # Center the content vertically in available space
+            start_y = margin_px + (available_height - total_height_needed) // 2
+        else:
+            # Content fills available space, start at margin
+            start_y = margin_px
+        
+        # Second pass: actually place the images with centered layout
+        current_y = start_y
+        images_placed_on_page = 0
+        
+        for row_images, row_height in page_rows:
+            # Check if this row fits
             if current_y + row_height > page_height - margin_px:
-                image_index = temp_index - len(row_images)
+                # This row doesn't fit, stop here but don't lose the images
+                status_callback(f"Row doesn't fit on page, moving to next page. Images on current page: {images_placed_on_page}")
                 break
-            image_index = temp_index
+                
+            # Calculate horizontal positioning (centering)
             total_row_img_width = sum(d['img'].width for d in row_images)
             total_row_width_with_spacing = total_row_img_width + spacing_px * (len(row_images) - 1)
             start_x = margin_px + (available_width - total_row_width_with_spacing) // 2
             current_x = start_x
+            
+            # Place images in this row
             for img_data in row_images:
                 img = img_data['img']
                 paste_y = current_y + (row_height - img.height) // 2
                 current_page.paste(img, (current_x, paste_y), img if img.mode == 'RGBA' else None)
                 current_x += img.width + spacing_px
                 page_has_images = True
+                images_placed_on_page += 1
+            
             current_y += row_height + spacing_px
-            rows_on_this_page += 1
+            image_index += len(row_images)
+        
         if page_has_images:
             pages.append(current_page)
-        if not page_has_images and image_index < len(image_data):
-            status_callback("WARNING: Remaining images may be too large.")
-            break
+            status_callback(f"Page {len(pages)} created with {images_placed_on_page} images")
+    
+    # Final check: ensure all images were placed
+    images_placed = image_index
+    if images_placed < total_images:
+        missing_count = total_images - images_placed
+        status_callback(f"WARNING: {missing_count} images were not placed due to sizing constraints!")
+        
+        # Provide specific suggestions (we need to pass params somehow, for now use generic advice)
+        status_callback("💡 Try reducing scale factor, increasing page size, or reducing margins/spacing")
+        
+        # Try to create additional pages for remaining images with adjusted settings
+        remaining_images = image_data[images_placed:]
+        if remaining_images:
+            status_callback(f"Attempting to place remaining {len(remaining_images)} images...")
+            # Create pages with single images per page if necessary
+            for img_data in remaining_images:
+                single_page = Image.new('RGB', page_size_px, 'white')
+                img = img_data['img']
+                
+                # Center the image on the page
+                paste_x = (page_width - img.width) // 2
+                paste_y = (page_height - img.height) // 2
+                
+                # Ensure image fits on page, if not, scale it down
+                if img.width > available_width or img.height > available_height:
+                    # Scale down to fit
+                    scale_w = available_width / img.width
+                    scale_h = available_height / img.height
+                    scale = min(scale_w, scale_h, 1.0)  # Don't scale up
+                    
+                    new_width = int(img.width * scale)
+                    new_height = int(img.height * scale)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    
+                    paste_x = margin_px + (available_width - new_width) // 2
+                    paste_y = margin_px + (available_height - new_height) // 2
+                
+                single_page.paste(img, (paste_x, paste_y), img if img.mode == 'RGBA' else None)
+                pages.append(single_page)
+                status_callback(f"Created individual page for image: {img_data.get('filename', 'unknown')}")
+    else:
+        status_callback(f"✓ All {total_images} images successfully placed across {len(pages)} pages")
+    
     return pages
 
 
 def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_callback=print):
     page_width, page_height = page_size_px
     bin_width, bin_height = page_width - (2 * margin_px), page_height - (2 * margin_px)
+    total_images = len(image_data)
+    
+    status_callback(f"Starting puzzle layout: {total_images} images to place")
+    
     packer = rectpack.newPacker(rotation=False)
     images = [d['img'] for d in image_data]
     for i, img in enumerate(images):
@@ -365,17 +461,240 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_
     for _ in range(len(images)):
         packer.add_bin(bin_width, bin_height)
     packer.pack()
+    
     pages = []
+    placed_images = set()
+    
     for i, abin in enumerate(packer):
         if not abin:
             break
         page = Image.new('RGB', page_size_px, 'white')
+        images_on_page = 0
         status_callback(f"Creating puzzle page {i+1}...")
+        
         for rect in abin:
             original_image = images[rect.rid]
             paste_x, paste_y = margin_px + rect.x, margin_px + rect.y
             page.paste(original_image, (paste_x, paste_y), original_image if original_image.mode == 'RGBA' else None)
+            placed_images.add(rect.rid)
+            images_on_page += 1
+            
         pages.append(page)
+        status_callback(f"Page {i+1} created with {images_on_page} images")
+    
+    # Check for unplaced images
+    if len(placed_images) < total_images:
+        missing_count = total_images - len(placed_images)
+        unplaced_indices = set(range(total_images)) - placed_images
+        status_callback(f"WARNING: {missing_count} images were not placed by puzzle algorithm!")
+        
+        # Create individual pages for unplaced images
+        for img_idx in unplaced_indices:
+            img_data = image_data[img_idx]
+            img = img_data['img']
+            single_page = Image.new('RGB', page_size_px, 'white')
+            
+            available_width = page_width - (2 * margin_px)
+            available_height = page_height - (2 * margin_px)
+            
+            # Scale down if necessary
+            if img.width > available_width or img.height > available_height:
+                scale_w = available_width / img.width
+                scale_h = available_height / img.height
+                scale = min(scale_w, scale_h, 1.0)
+                
+                new_width = int(img.width * scale)
+                new_height = int(img.height * scale)
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Center the image
+            paste_x = margin_px + (available_width - img.width) // 2
+            paste_y = margin_px + (available_height - img.height) // 2
+            
+            single_page.paste(img, (paste_x, paste_y), img if img.mode == 'RGBA' else None)
+            pages.append(single_page)
+            status_callback(f"Created individual page for unplaced image: {img_data.get('filename', 'unknown')}")
+    else:
+        status_callback(f"✓ All {total_images} images successfully placed across {len(pages)} pages")
+    
+    return pages
+
+
+def place_images_masonry(image_data, page_size_px, margin_px, spacing_px, columns=3, status_callback=print):
+    """Place images in masonry layout (Pinterest-style vertical columns)."""
+    page_width, page_height = page_size_px
+    available_width = page_width - (2 * margin_px)
+    col_width = (available_width - (columns - 1) * spacing_px) // columns
+    total_images = len(image_data)
+
+    pages = []
+    current_page = Image.new('RGB', page_size_px, 'white')
+
+    # Track height for each column
+    column_heights = [margin_px] * columns
+    page_num = 1
+
+    status_callback(f"Starting masonry layout: {total_images} images with {columns} columns...")
+
+    for idx, data in enumerate(image_data):
+        img = data['img']
+
+        # Scale image to fit column width while maintaining aspect ratio
+        aspect_ratio = img.height / img.width
+        new_width = col_width
+        new_height = int(new_width * aspect_ratio)
+
+        # Resize image if needed
+        if img.width != new_width:
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Find column with minimum height
+        min_col_idx = column_heights.index(min(column_heights))
+
+        # Check if image fits on current page
+        if column_heights[min_col_idx] + new_height + margin_px > page_height:
+            # Check if any column has space
+            if all(h + new_height + margin_px > page_height for h in column_heights):
+                # Start new page
+                pages.append(current_page)
+                current_page = Image.new('RGB', page_size_px, 'white')
+                column_heights = [margin_px] * columns
+                page_num += 1
+                status_callback(f"Starting masonry page {page_num}...")
+                min_col_idx = 0
+
+        # Calculate position
+        x = margin_px + min_col_idx * (col_width + spacing_px)
+        y = column_heights[min_col_idx]
+
+        # Paste image
+        current_page.paste(img, (x, y), img if img.mode == 'RGBA' else None)
+
+        # Update column height
+        column_heights[min_col_idx] = y + new_height + spacing_px
+
+        status_callback(f"Placed image {idx+1} of {len(image_data)} in column {min_col_idx+1}")
+
+    # Add last page if it has content
+    if any(h > margin_px for h in column_heights):
+        pages.append(current_page)
+
+    return pages
+
+
+def place_images_masonry_with_captions(image_data, page_size_px, margin_px, spacing_px, columns, params, metadata=None, status_callback=print):
+    """Place images in masonry layout handling captions separately to maintain font size."""
+    page_width, page_height = page_size_px
+    available_width = page_width - (2 * margin_px)
+    col_width = (available_width - (columns - 1) * spacing_px) // columns
+
+    pages = []
+    current_page = Image.new('RGB', page_size_px, 'white')
+
+    # Track height for each column
+    column_heights = [margin_px] * columns
+    page_num = 1
+
+    status_callback(f"Creating masonry layout with {columns} columns and fixed caption size...")
+
+    # Get caption settings
+    add_caption = params.get('add_caption', True)
+    caption_font_size = params.get('caption_font_size', 12)
+    caption_padding = params.get('caption_padding', 5)
+
+    for idx, data in enumerate(image_data):
+        # Get the original image WITHOUT any pre-existing captions
+        original_img = data['img']
+        
+        # Extract only the image part if it has captions already
+        # (This handles the case where captions were added before masonry)
+        if hasattr(data, 'original_img'):
+            original_img = data['original_img']
+        else:
+            # Try to detect if this image already has captions and extract the image part
+            # For now, use the full image as we'll handle captions separately
+            original_img = data['img']
+
+        # Scale image to fit column width while maintaining aspect ratio
+        aspect_ratio = original_img.height / original_img.width
+        new_width = col_width
+        new_height = int(new_width * aspect_ratio)
+
+        # Resize image if needed
+        if original_img.width != new_width:
+            scaled_img = original_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        else:
+            scaled_img = original_img.copy()
+
+        # Calculate caption dimensions with FIXED font size
+        caption_height = 0
+        caption_text_lines = []
+        if add_caption:
+            # Create caption text
+            caption_lines = [data['name']]
+            img_metadata = metadata.get(data['name']) if metadata else None
+            if img_metadata:
+                for key, value in img_metadata.items():
+                    if value is not None:
+                        caption_lines.append(f"{key}: {value}")
+            
+            caption_text_lines = caption_lines
+            # Calculate height needed for caption with FIXED font size
+            font = get_font(caption_font_size)
+            temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+            full_caption_text = "\n".join(caption_lines)
+            text_bbox = temp_draw.multiline_textbbox((0, 0), full_caption_text, font=font)
+            caption_height = (text_bbox[3] - text_bbox[1]) + (caption_padding * 2)
+
+        total_height = new_height + caption_height
+
+        # Find column with minimum height
+        min_col_idx = column_heights.index(min(column_heights))
+
+        # Check if image + caption fits on current page
+        if column_heights[min_col_idx] + total_height + margin_px > page_height:
+            # Check if any column has space
+            if all(h + total_height + margin_px > page_height for h in column_heights):
+                # Start new page
+                pages.append(current_page)
+                current_page = Image.new('RGB', page_size_px, 'white')
+                column_heights = [margin_px] * columns
+                page_num += 1
+                status_callback(f"Starting masonry page {page_num}...")
+                min_col_idx = 0
+
+        # Calculate position
+        x = margin_px + min_col_idx * (col_width + spacing_px)
+        y = column_heights[min_col_idx]
+
+        # Paste scaled image
+        current_page.paste(scaled_img, (x, y), scaled_img if scaled_img.mode == 'RGBA' else None)
+
+        # Add caption with FIXED font size directly to the page
+        if add_caption and caption_text_lines:
+            font = get_font(caption_font_size)
+            draw = ImageDraw.Draw(current_page)
+            
+            caption_y = y + new_height + caption_padding
+            full_caption_text = "\n".join(caption_text_lines)
+            
+            # Calculate text width for centering
+            text_bbox = draw.multiline_textbbox((0, 0), full_caption_text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_x = x + (new_width - text_width) // 2
+            
+            # Draw caption text directly on page with fixed font size
+            draw.multiline_text((text_x, caption_y), full_caption_text, font=font, fill="black", align="center")
+
+        # Update column height
+        column_heights[min_col_idx] = y + total_height + spacing_px
+
+        status_callback(f"Placed image {idx+1} of {len(image_data)} in column {min_col_idx+1}")
+
+    # Add last page if it has content
+    if any(h > margin_px for h in column_heights):
+        pages.append(current_page)
+
     return pages
 
 
@@ -383,7 +702,7 @@ def draw_margin_border(page, margin_px, status_callback=print):
     """Draw a border frame to visualize page margins."""
     if margin_px <= 0:
         return page
-    
+
     status_callback("Adding margin borders...")
     draw = ImageDraw.Draw(page)
     
@@ -402,6 +721,50 @@ def draw_margin_border(page, margin_px, status_callback=print):
     
     # Inner border (content area)
     draw.rectangle(inner_rect, outline="gray", width=2)
+    
+    return page
+
+
+def add_table_number_to_page(page, table_number, position, font_size, margin_px, prefix="Tav.", status_callback=print):
+    """Add table number to page at specified position aligned with margin."""
+    if not table_number:
+        return page
+    
+    status_callback(f"Adding table number {prefix} {table_number} at position {position}...")
+    
+    draw = ImageDraw.Draw(page)
+    page_width, page_height = page.size
+    
+    # Get font
+    font = get_font(font_size)
+    table_text = f"{prefix} {table_number}"
+    
+    # Calculate text dimensions
+    text_bbox = draw.textbbox((0, 0), table_text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
+    
+    # Position near margin boundaries with small offset
+    offset = 5  # Small offset from margin boundary
+    if position == "top_left":
+        x = margin_px + offset
+        y = margin_px + offset
+    elif position == "top_right":
+        x = page_width - margin_px - text_width - offset
+        y = margin_px + offset
+    elif position == "bottom_left":
+        x = margin_px + offset
+        y = page_height - margin_px - text_height - offset
+    elif position == "bottom_right":
+        x = page_width - margin_px - text_width - offset
+        y = page_height - margin_px - text_height - offset
+    else:
+        # Default to top_left
+        x = margin_px + offset
+        y = margin_px + offset
+    
+    # Draw the table number text directly (no background rectangle)
+    draw.text((x, y), table_text, font=font, fill="black")
     
     return page
     draw.rectangle(inner_rect, outline="gray", width=2)
@@ -633,10 +996,9 @@ Each page is a separate layer - use Inkscape's layer panel to navigate'''
                 'x': str(margin_px), 'y': str(margin_px),
                 'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
                 'fill': 'none',
-                'stroke': '#ff0000',
-                'stroke-width': '2',
-                'stroke-dasharray': '5,5',
-                'opacity': '0.5'
+                'stroke': '#000000',
+                'stroke-width': '1',
+                'opacity': '0.8'
             })
         
         # Add images and captions for this page
@@ -758,7 +1120,7 @@ def _add_simple_scale_bar_to_layer(parent_layer, width_px, height_px, params):
     }).text = f'{target_cm} cm'
 
 
-def create_lightweight_editable_svg(image_positions, page_size_px, params, output_dir, metadata=None, status_callback=print):
+def create_lightweight_editable_svg(image_positions, page_size_px, params, output_dir, page_number=0, metadata=None, status_callback=print):
     """Create lightweight SVG with external image references."""
     width_px, height_px = page_size_px
     status_callback("Creating lightweight editable SVG with external image references...")
@@ -811,10 +1173,9 @@ def create_lightweight_editable_svg(image_positions, page_size_px, params, outpu
             'x': str(margin_px), 'y': str(margin_px),
             'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
             'fill': 'none',
-            'stroke': '#ff0000',
-            'stroke-width': '2',
-            'stroke-dasharray': '5,5',
-            'opacity': '0.5'
+            'stroke': '#000000',
+            'stroke-width': '1',
+            'opacity': '0.8'
         })
     
     # Images group
@@ -887,6 +1248,16 @@ def create_lightweight_editable_svg(image_positions, page_size_px, params, outpu
     # Add scale bar
     if params.get('add_scale_bar'):
         _add_simple_scale_bar_to_svg(svg, width_px, height_px, params)
+    
+    # Add table number if requested
+    if params.get('add_table_number'):
+        start_number = params.get('table_start_number', 1)
+        table_number = start_number + page_number
+        position = params.get('table_position', 'top_left')
+        font_size = params.get('table_font_size', 18)
+        margin_px = params.get('margin_px', 0)
+        prefix = params.get('table_prefix', 'Tav.')
+        _add_table_number_to_svg(svg, width_px, height_px, table_number, position, font_size, margin_px, prefix, status_callback)
     
     return svg
 
@@ -1009,9 +1380,8 @@ def _add_simple_scale_bar_to_svg(svg, width_px, height_px, params):
             'x': str(margin_px), 'y': str(margin_px),
             'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
             'fill': 'none',
-            'stroke': '#ff0000',
-            'stroke-width': '2',
-            'stroke-dasharray': '10,5'
+            'stroke': '#000000',
+            'stroke-width': '1'
         })
     
     # Images layer
@@ -1165,7 +1535,7 @@ def _add_illustrator_scale_bar(scale_layer, width_px, height_px, params, status_
 
 # Removed AI format functions as requested - SVG only approach
 
-def create_editable_svg_layout_fixed(image_positions, page_size_px, params, output_dir, metadata=None, status_callback=print):
+def create_editable_svg_layout_fixed(image_positions, page_size_px, params, output_dir, page_number=0, metadata=None, status_callback=print):
     """Create SVG with separate, editable elements using external image files."""
     width_px, height_px = page_size_px
     status_callback("Creating editable SVG with separate elements and external images...")
@@ -1213,9 +1583,8 @@ def create_editable_svg_layout_fixed(image_positions, page_size_px, params, outp
             'x': str(margin_px), 'y': str(margin_px),
             'width': str(width_px - 2*margin_px), 'height': str(height_px - 2*margin_px),
             'fill': 'none',
-            'stroke': '#ff0000',
-            'stroke-width': '2',
-            'stroke-dasharray': '10,5'
+            'stroke': '#000000',
+            'stroke-width': '1'
         })
         
         # Add corner markers for easier reference
@@ -1321,6 +1690,16 @@ def create_editable_svg_layout_fixed(image_positions, page_size_px, params, outp
     if params.get('add_scale_bar'):
         _add_editable_scale_bar_to_svg(svg, width_px, height_px, params, status_callback)
     
+    # Add table number if requested
+    if params.get('add_table_number'):
+        start_number = params.get('table_start_number', 1)
+        table_number = start_number + page_number
+        position = params.get('table_position', 'top_left')
+        font_size = params.get('table_font_size', 18)
+        margin_px = params.get('margin_px', 0)
+        prefix = params.get('table_prefix', 'Tav.')
+        _add_table_number_to_svg(svg, width_px, height_px, table_number, position, font_size, margin_px, prefix, status_callback)
+    
     return svg
 
 
@@ -1393,11 +1772,66 @@ def _add_editable_scale_bar_to_svg(svg, width_px, height_px, params, status_call
     end_label.text = f'{target_cm} cm'
 
 
+def _add_table_number_to_svg(svg, width_px, height_px, table_number, position, font_size, margin_px, prefix="Tav.", status_callback=print):
+    """Add table number to SVG as editable text element aligned with margin."""
+    if not table_number:
+        return
+        
+    status_callback(f"Adding table number {prefix} {table_number} to SVG at position {position}...")
+    
+    table_text = f"{prefix} {table_number}"
+    
+    # Position near margin boundaries with small offset
+    offset = 5  # Small offset from margin boundary
+    if position == "top_left":
+        x = margin_px + offset
+        y = margin_px + offset + font_size  # Add font size to y for proper text baseline
+        text_anchor = "start"
+    elif position == "top_right":
+        x = width_px - margin_px - offset
+        y = margin_px + offset + font_size
+        text_anchor = "end"
+    elif position == "bottom_left":
+        x = margin_px + offset
+        y = height_px - margin_px - offset
+        text_anchor = "start"
+    elif position == "bottom_right":
+        x = width_px - margin_px - offset
+        y = height_px - margin_px - offset
+        text_anchor = "end"
+    else:
+        # Default to top_left
+        x = margin_px + offset
+        y = margin_px + offset + font_size
+        text_anchor = "start"
+    
+    # Create table number group
+    table_group = ET.SubElement(svg, 'g', attrib={
+        'id': f'table-number-{table_number}',
+        'inkscape:label': f'Table Number {table_number}',
+        'inkscape:groupmode': 'layer'
+    })
+    
+    # Add the table number text directly (no background rectangle)
+    table_text_element = ET.SubElement(table_group, 'text', attrib={
+        'id': f'table-number-{table_number}-text',
+        'x': str(x),
+        'y': str(y),
+        'font-family': 'Arial, sans-serif',
+        'font-size': str(font_size),
+        'font-weight': 'bold',
+        'fill': 'black',
+        'text-anchor': text_anchor
+    })
+    table_text_element.text = table_text
+
+
 def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, params, metadata=None, status_callback=print):
     """Calculate positions for grid layout, returning position data for editable output."""
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
     available_width = page_width - (2 * margin_px)
+    available_height = page_height - (2 * margin_px)
     
     all_positions = []
     image_index = 0
@@ -1405,16 +1839,20 @@ def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, m
     
     while image_index < len(image_data):
         page_positions = []
-        current_y = margin_px
-        rows_on_this_page = 0
         
-        while image_index < len(image_data) and rows_on_this_page < rows_per_page:
+        # Collect all rows for this page first to calculate total height
+        page_rows = []
+        temp_image_index = image_index
+        temp_rows_on_page = 0
+        
+        # First pass: collect all rows and calculate dimensions
+        while temp_image_index < len(image_data) and temp_rows_on_page < rows_per_page:
             row_images = []
             current_row_width = 0
             row_height = 0
-            temp_index = image_index
+            temp_index = temp_image_index
             
-            # Calculate row composition
+            # Build the row
             while temp_index < len(image_data) and len(row_images) < suggested_cols:
                 img_data = image_data[temp_index]
                 img = img_data['img']
@@ -1431,36 +1869,62 @@ def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, m
                 else:
                     break
             
-            if not row_images and image_index < len(image_data):
-                # Force fit at least one image
-                img_data = image_data[image_index]
+            # Force at least one image per row if possible
+            if not row_images and temp_image_index < len(image_data):
+                img_data = image_data[temp_image_index]
                 img = img_data['img']
                 row_images.append({
                     'image_data': img_data,
                     'size': (img.width, img.height)
                 })
                 row_height = img.height
-                temp_index = image_index + 1
+                temp_index = temp_image_index + 1
             
             if not row_images:
                 break
                 
+            page_rows.append((row_images, row_height))
+            temp_image_index = temp_index
+            temp_rows_on_page += 1
+        
+        if not page_rows:
+            # No rows could be created, break
+            break
+        
+        # Calculate total content height
+        total_content_height = sum(row_height for _, row_height in page_rows)
+        total_spacing_height = spacing_px * (len(page_rows) - 1) if len(page_rows) > 1 else 0
+        total_height_needed = total_content_height + total_spacing_height
+        
+        # Calculate starting Y position to center content vertically
+        if total_height_needed < available_height:
+            # Center the content vertically in available space
+            start_y = margin_px + (available_height - total_height_needed) // 2
+        else:
+            # Content fills available space, start at margin
+            start_y = margin_px
+        
+        # Second pass: actually calculate positions with centered layout
+        current_y = start_y
+        for row_images, row_height in page_rows:
+            # Check if this row fits
             if current_y + row_height > page_height - margin_px:
+                # This row doesn't fit, stop here
                 break
-            
-            # Calculate positions for this row
+                
+            # Calculate horizontal positioning (centering)
             total_row_img_width = sum(item['size'][0] for item in row_images)
             total_row_width_with_spacing = total_row_img_width + spacing_px * (len(row_images) - 1)
             start_x = margin_px + (available_width - total_row_width_with_spacing) // 2
             current_x = start_x
             
+            # Calculate positions for images in this row
             for item in row_images:
                 img_data = item['image_data']
                 img_width, img_height = item['size']
                 paste_y = current_y + (row_height - img_height) // 2
                 
-                # Store original image reference for SVG
-                img_data['original_img'] = img_data['img'].copy()
+                # original_img already stored at process start
                 
                 # Create caption text if needed
                 caption_text = ""
@@ -1483,9 +1947,8 @@ def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, m
                 page_positions.append(position_data)
                 current_x += img_width + spacing_px
             
-            image_index = temp_index
             current_y += row_height + spacing_px
-            rows_on_this_page += 1
+            image_index += len(row_images)
         
         if page_positions:
             all_positions.extend(page_positions)
@@ -1522,7 +1985,7 @@ def save_editable_output(image_positions, page_size_px, output_file, params, met
                 page_folder = export_dir / f"{file_stem}_page_{page_num+1}"
                 page_folder.mkdir(parents=True, exist_ok=True)
                 
-                svg_element = create_lightweight_editable_svg(page_positions, page_size_px, params, page_folder, metadata, status_callback)
+                svg_element = create_lightweight_editable_svg(page_positions, page_size_px, params, page_folder, page_num, metadata, status_callback)
                 svg_path = page_folder / f"{file_stem}_page_{page_num+1}.svg"
                 _save_svg_element_to_file(svg_element, svg_path, status_callback)
         else:
@@ -1530,7 +1993,7 @@ def save_editable_output(image_positions, page_size_px, output_file, params, met
             svg_folder = export_dir / file_stem
             svg_folder.mkdir(parents=True, exist_ok=True)
             
-            svg_element = create_lightweight_editable_svg(image_positions, page_size_px, params, svg_folder, metadata, status_callback)
+            svg_element = create_lightweight_editable_svg(image_positions, page_size_px, params, svg_folder, 0, metadata, status_callback)
             svg_path = svg_folder / f"{file_stem}.svg"
             _save_svg_element_to_file(svg_element, svg_path, status_callback)
         
@@ -1576,6 +2039,7 @@ IMPORTANT NOTES:
 TECHNICAL FEATURES:
 • External image linking for efficient file sizes
 • Vector-based text and graphics
+• Automatic table numbering (customizable)
 • No filename clutter in final output
 • Cross-platform compatibility
 """)
@@ -1812,6 +2276,50 @@ def _create_pages_from_positions(image_positions, page_size_px, params, status_c
         status_callback(f"Fallback: saved as PNG instead: {png_path}")
 
 
+def suggest_layout_improvements(params, status_callback=print):
+    """Provide suggestions when images don't fit properly."""
+    current_scale = params.get('scale_factor', 1.0)
+    current_margin = params.get('margin_px', 50)
+    current_spacing = params.get('spacing_px', 10)
+    page_size = params.get('page_size', 'A4')
+    
+    status_callback("💡 Layout Improvement Suggestions:")
+    
+    if current_scale > 0.3:
+        new_scale = max(0.1, current_scale * 0.7)
+        status_callback(f"   • Try reducing scale factor from {current_scale:.2f} to {new_scale:.2f}")
+    
+    if current_margin > 20:
+        new_margin = max(10, current_margin - 20)
+        status_callback(f"   • Try reducing page margins from {current_margin}px to {new_margin}px")
+        
+    if current_spacing > 5:
+        new_spacing = max(2, current_spacing - 5)
+        status_callback(f"   • Try reducing image spacing from {current_spacing}px to {new_spacing}px")
+        
+    if page_size == 'A4':
+        status_callback(f"   • Try using larger page format (A3) for more space")
+        
+    status_callback(f"   • Consider using 'puzzle' mode for optimal space utilization")
+    status_callback(f"   • Or use 'masonry' mode for flexible vertical layout")
+
+
+def verify_all_images_processed(original_count, pages, status_callback=print):
+    """Verify that all images from the input folder are represented in the pages."""
+    if not pages:
+        status_callback("ERROR: No pages were created!")
+        return False
+    
+    # This is a simple count verification
+    # In a more sophisticated version, we could track specific image files
+    status_callback(f"Verification: Started with {original_count} images")
+    status_callback(f"Verification: Created {len(pages)} pages")
+    
+    # This function mainly provides logging for user awareness
+    # The individual placement functions now handle the actual verification
+    return True
+
+
 def run_layout_process(params, status_callback=print):
     """Main orchestrator function that runs the complete layout process."""
     try:
@@ -1821,6 +2329,10 @@ def run_layout_process(params, status_callback=print):
             status_callback("No images found. Process interrupted.")
             return
         
+        # Store original images before any modification for SVG export
+        for data in image_data:
+            data['original_img'] = data['img'].copy()
+        
         # Hierarchical sorting
         primary_sort = params.get('sort_by', 'alphabetical')
         secondary_sort = params.get('sort_by_secondary', 'none')
@@ -1828,7 +2340,8 @@ def run_layout_process(params, status_callback=print):
         image_data = scale_images(image_data, params.get('scale_factor', 1.0), status_callback)
         
         # Add captions to image data if requested (needed for positioning)
-        if params.get('add_caption'):
+        # Note: For masonry layout, captions are handled separately to maintain font size
+        if params.get('add_caption') and params.get('mode') != 'masonry':
             image_data = add_captions_to_images(
                 image_data,
                 metadata,
@@ -1866,6 +2379,13 @@ def run_layout_process(params, status_callback=print):
             
             status_callback(f"Positioned {len(image_positions)} images for editable output.")
             
+            # Verify all images were positioned
+            if len(image_positions) < len(image_data):
+                missing_count = len(image_data) - len(image_positions)
+                status_callback(f"WARNING: {missing_count} images were not positioned in editable layout!")
+            else:
+                status_callback(f"✓ All {len(image_data)} images successfully positioned for editable output")
+            
             # Save editable output
             status_callback(f"Saving editable output to '{output_file}'...")
             save_editable_output(image_positions, page_dims, output_file, params, metadata, status_callback)
@@ -1880,8 +2400,19 @@ def run_layout_process(params, status_callback=print):
                 final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
             elif params.get('mode') == 'puzzle':
                 final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
+            elif params.get('mode') == 'masonry':
+                columns = params.get('grid_cols', 3)  # Use grid_cols for masonry columns
+                if params.get('add_caption'):
+                    # Use the caption-aware masonry function to maintain fixed font size
+                    final_pages = place_images_masonry_with_captions(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, params, metadata, status_callback)
+                else:
+                    # Use regular masonry for images without captions
+                    final_pages = place_images_masonry(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, status_callback)
             
             status_callback(f"Generated {len(final_pages)} pages.")
+            
+            # Verify all images were processed
+            verify_all_images_processed(len(image_data), final_pages, status_callback)
             
             # Add scale bar to traditional layout
             if params.get('add_scale_bar') and final_pages:
@@ -1899,6 +2430,19 @@ def run_layout_process(params, status_callback=print):
                 status_callback("Adding margin borders to pages...")
                 for i, page in enumerate(final_pages):
                     final_pages[i] = draw_margin_border(page, params.get('margin_px', 0), status_callback)
+            
+            # Add table numbers if requested
+            if params.get('add_table_number') and final_pages:
+                status_callback("Adding table numbers to pages...")
+                start_number = params.get('table_start_number', 1)
+                position = params.get('table_position', 'top_left')
+                font_size = params.get('table_font_size', 18)
+                margin_px = params.get('margin_px', 0)
+                prefix = params.get('table_prefix', 'Tav.')
+                
+                for i, page in enumerate(final_pages):
+                    table_number = start_number + i
+                    final_pages[i] = add_table_number_to_page(page, table_number, position, font_size, margin_px, prefix, status_callback)
             
             # Save traditional output
             status_callback(f"Saving output to '{output_file}'...")

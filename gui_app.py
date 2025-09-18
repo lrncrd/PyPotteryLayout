@@ -2,13 +2,12 @@
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from tkinter.scrolledtext import ScrolledText
 from tkinter.constants import *
 from PIL import Image, ImageTk
 import threading
 import os
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 # Make sure backend_logic.py is in the same folder
 import backend_logic
@@ -55,69 +54,287 @@ class LayoutApp(tk.Tk):
             'pixels_per_cm': tk.IntVar(value=118), # ~300DPI equivalent
             'show_margin_border': tk.BooleanVar(value=False),  # New feature for margin borders
             'export_format': tk.StringVar(value="PDF"),  # Export format selection
+            'add_table_number': tk.BooleanVar(value=True),  # Add table numbering
+            'table_start_number': tk.IntVar(value=1),  # Starting table number
+            'table_position': tk.StringVar(value="top_left"),  # Position: top_left, top_right, bottom_left, bottom_right
+            'table_font_size': tk.IntVar(value=18),  # Table number font size
+            'table_prefix': tk.StringVar(value="Tav."),  # Table number prefix
         }
 
         # Variable to show formatted scale value
         self.scale_display = tk.StringVar(value="1.00x")
 
+        # Preview-related variables
+        self.preview_images = []  # Store loaded image thumbnails
+        self.preview_update_pending = False
+        self.preview_update_timer = None
+
+        # Manual layout variables
+        self.manual_positions = {}  # Store manual positions for images
+        self.dragging_item = None
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+
         self._create_widgets()
         self._update_ui_for_mode() # Set initial state
         self._update_sort_options() # Set initial sort options
 
-    def _create_widgets(self):
-        # Create main frame with scrollable content
-        main_canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=main_canvas.yview)
-        scrollable_frame = ttk.Frame(main_canvas)
+        # Bind variable changes to preview update
+        self._setup_preview_bindings()
 
-        scrollable_frame.bind(
+    def _create_widgets(self):
+        # Update window size to accommodate preview panel and larger terminal
+        self.geometry("1400x900")
+
+        # Main vertical container
+        main_vertical_container = ttk.Frame(self)
+        main_vertical_container.pack(fill="both", expand=True)
+
+        # Create global header at the top
+        self._create_global_header(main_vertical_container)
+
+        # Top container with horizontal paned window
+        top_container = ttk.PanedWindow(main_vertical_container, orient=tk.HORIZONTAL)
+        top_container.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        # Left panel with tabs
+        left_panel = ttk.Frame(top_container)
+
+        # Create notebook for tabs
+        self.notebook = ttk.Notebook(left_panel)
+        self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Tab 1: Input/Output
+        tab1 = ttk.Frame(self.notebook)
+        self.notebook.add(tab1, text="Input/Output")
+
+        # Create scrollable content for tab1
+        tab1_canvas = tk.Canvas(tab1)
+        tab1_scrollbar = ttk.Scrollbar(tab1, orient="vertical", command=tab1_canvas.yview)
+        tab1_frame = ttk.Frame(tab1_canvas)
+
+        tab1_frame.bind(
             "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+            lambda e: tab1_canvas.configure(scrollregion=tab1_canvas.bbox("all"))
         )
 
-        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        main_canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Bind mouse wheel scrolling
-        def _on_mousewheel(event):
-            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        self.bind_all("<MouseWheel>", _on_mousewheel)
+        tab1_canvas.create_window((0, 0), window=tab1_frame, anchor="nw")
+        tab1_canvas.configure(yscrollcommand=tab1_scrollbar.set)
 
         # Pack canvas and scrollbar
-        main_canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        tab1_canvas.pack(side="left", fill="both", expand=True)
+        tab1_scrollbar.pack(side="right", fill="y")
 
-        # Main content frame
-        main_frame = ttk.Frame(scrollable_frame, padding="10")
-        main_frame.pack(fill=X, expand=NO)
+        # Add content to tab1
+        tab1_content = ttk.Frame(tab1_frame, padding="10")
+        tab1_content.pack(fill="both", expand=True)
 
-        # --- Header Section ---
-        self._create_header(main_frame)
-
-        # --- Files & Folders Section ---
-        path_frame = ttk.Labelframe(main_frame, text="1. Files and Folders", padding="10")
+        # Files & Folders Section
+        path_frame = ttk.Labelframe(tab1_content, text="Files and Folders", padding="10")
         path_frame.pack(fill=X, expand=NO, pady=5)
         self._create_path_widgets(path_frame)
 
-        # --- Layout Section ---
-        layout_frame = ttk.Labelframe(main_frame, text="2. Layout Settings", padding="10")
+        # Export Button
+        self.run_button = ttk.Button(tab1_content, text="Export Layout", command=self._start_process)
+        self.run_button.pack(pady=15, fill=X, ipady=8)
+
+        # Tab 2: Layout Configuration
+        tab2 = ttk.Frame(self.notebook)
+        self.notebook.add(tab2, text="Layout Configuration")
+
+        # Create scrollable content for tab2
+        tab2_canvas = tk.Canvas(tab2)
+        tab2_scrollbar = ttk.Scrollbar(tab2, orient="vertical", command=tab2_canvas.yview)
+        tab2_frame = ttk.Frame(tab2_canvas)
+
+        tab2_frame.bind(
+            "<Configure>",
+            lambda e: tab2_canvas.configure(scrollregion=tab2_canvas.bbox("all"))
+        )
+
+        tab2_canvas.create_window((0, 0), window=tab2_frame, anchor="nw")
+        tab2_canvas.configure(yscrollcommand=tab2_scrollbar.set)
+
+        # Pack canvas and scrollbar
+        tab2_canvas.pack(side="left", fill="both", expand=True)
+        tab2_scrollbar.pack(side="right", fill="y")
+
+        # Add content to tab2
+        tab2_content = ttk.Frame(tab2_frame, padding="10")
+        tab2_content.pack(fill="both", expand=True)
+
+        # Layout Section
+        layout_frame = ttk.Labelframe(tab2_content, text="Layout Settings", padding="10")
         layout_frame.pack(fill=X, expand=NO, pady=5)
         self._create_layout_widgets(layout_frame)
 
-        # --- Details Section ---
-        details_frame = ttk.Labelframe(main_frame, text="3. Details and Additions", padding="10")
+        # Details Section
+        details_frame = ttk.Labelframe(tab2_content, text="Details and Additions", padding="10")
         details_frame.pack(fill=X, expand=NO, pady=5)
         self._create_details_widgets(details_frame)
-        
-        # --- Export Button ---
-        self.run_button = ttk.Button(main_frame, text="Export Layout", command=self._start_process)
-        self.run_button.pack(pady=15, fill=X, ipady=8)
 
-        # --- Status Log ---
-        log_frame = ttk.Labelframe(main_frame, text="Process Log", padding="10")
-        log_frame.pack(fill=X, expand=NO, pady=5)
-        self.log_text = ScrolledText(log_frame, height=6, wrap=tk.WORD, state='disabled')
-        self.log_text.pack(fill=X, expand=NO)
+        # Bind mouse wheel scrolling for both tabs
+        def _on_mousewheel(event):
+            # Determine which tab is active and scroll accordingly
+            current_tab = self.notebook.index(self.notebook.select())
+            if current_tab == 0:
+                tab1_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            elif current_tab == 1:
+                tab2_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # Add left panel to horizontal paned window
+        top_container.add(left_panel, weight=1)
+
+        # Right panel for preview and additional controls
+        right_panel = ttk.Frame(top_container)
+        self._create_preview_panel(right_panel)
+
+        # Add controls under preview
+        self._create_preview_controls(right_panel)
+
+        top_container.add(right_panel, weight=2)
+
+        # Set initial sash position to prevent overlap
+        self.after(100, lambda: top_container.sashpos(0, 650))
+
+        # Bottom terminal-style log
+        self._create_terminal_log(main_vertical_container)
+
+    def _create_global_header(self, parent):
+        """Create global application header with icon, title, and info button"""
+        header_frame = ttk.Frame(parent)
+        header_frame.pack(fill=X, padx=5, pady=5)
+        
+        # Create icon section (left)
+        icon_frame = ttk.Frame(header_frame)
+        icon_frame.pack(side=LEFT, padx=10, pady=5)
+        
+        # Load and display icon
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "imgs", "icon_app.png")
+            if os.path.exists(icon_path):
+                icon_image = Image.open(icon_path)
+                icon_image = icon_image.resize((40, 40), Image.Resampling.LANCZOS)
+                self.global_icon_photo = ImageTk.PhotoImage(icon_image)
+                icon_label = ttk.Label(icon_frame, image=self.global_icon_photo)
+                icon_label.pack()
+            else:
+                icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 28))
+                icon_label.pack()
+        except Exception:
+            icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 28))
+            icon_label.pack()
+        
+        # Create title section (center)
+        title_frame = ttk.Frame(header_frame)
+        title_frame.pack(side=LEFT, fill=X, expand=YES, padx=10, pady=5)
+        
+        title_label = ttk.Label(title_frame, text="PyPotteryLayout", 
+                               font=("Arial", 18, "bold"))
+        title_label.pack(anchor=W)
+
+        subtitle_label = ttk.Label(title_frame, text=f"Create artefacts table effortlessly - v{VERSION}", 
+                                  font=("Arial", 11), foreground="gray")
+        subtitle_label.pack(anchor=W)
+
+        # Create info button section (right)
+        info_frame = ttk.Frame(header_frame)
+        info_frame.pack(side=RIGHT, padx=10, pady=5)
+        
+        info_button = ttk.Button(info_frame, text="ℹ️ Info", command=self._show_info_dialog)
+        info_button.pack()
+
+    def _show_info_dialog(self):
+        """Show information dialog with app details"""
+        # Create a new window
+        info_window = tk.Toplevel(self)
+        info_window.title("About PyPotteryLayout")
+        info_window.geometry("550x500")
+        info_window.resizable(False, False)
+        
+        # Center the window
+        info_window.transient(self)
+        info_window.grab_set()
+        
+        # Main frame with padding
+        main_frame = ttk.Frame(info_window, padding="20")
+        main_frame.pack(fill="both", expand=True)
+        
+        # Logo section
+        logo_frame = ttk.Frame(main_frame)
+        logo_frame.pack(pady=(0, 20))
+        
+        try:
+            # Try to load the logo
+            logo_path = os.path.join(os.path.dirname(__file__), "imgs", "LogoLayout.png")
+            if os.path.exists(logo_path):
+                logo_image = Image.open(logo_path)
+                # Resize logo maintaining aspect ratio
+                max_size = 150
+                original_width, original_height = logo_image.size
+                ratio = min(max_size / original_width, max_size / original_height)
+                new_width = int(original_width * ratio)
+                new_height = int(original_height * ratio)
+                logo_image = logo_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                self.info_logo_photo = ImageTk.PhotoImage(logo_image)
+                logo_label = ttk.Label(logo_frame, image=self.info_logo_photo)
+                logo_label.pack()
+            else:
+                # Fallback to large emoji
+                logo_label = ttk.Label(logo_frame, text="🏺", font=("Arial", 72))
+                logo_label.pack()
+        except Exception:
+            # Fallback to large emoji
+            logo_label = ttk.Label(logo_frame, text="🏺", font=("Arial", 72))
+            logo_label.pack()
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="PyPotteryLayout", 
+                               font=("Arial", 24, "bold"))
+        title_label.pack(pady=(0, 10))
+        
+        # Version
+        version_label = ttk.Label(main_frame, text=f"Version {VERSION}", 
+                                 font=("Arial", 14))
+        version_label.pack(pady=(0, 15))
+        
+        # Description
+        desc_label = ttk.Label(main_frame, 
+                              text="Create archaeological artefacts tables effortlessly\nwith intelligent layout algorithms and export options.",
+                              font=("Arial", 12), justify="center")
+        desc_label.pack(pady=(0, 15))
+        
+        # Author
+        author_label = ttk.Label(main_frame, text="Author: Lorenzo Cardarelli; Enzo Cocca", 
+                                font=("Arial", 12, "bold"))
+        author_label.pack(pady=(0, 10))
+        
+        # GitHub link
+        github_frame = ttk.Frame(main_frame)
+        github_frame.pack(pady=(0, 20))
+        
+        github_label = ttk.Label(github_frame, text="GitHub Project:", 
+                                font=("Arial", 12))
+        github_label.pack()
+        
+        # Make the GitHub link clickable
+        github_link = ttk.Label(github_frame, text="https://github.com/lrncrd/PyPotteryLayout", 
+                               font=("Arial", 11, "underline"), foreground="blue", cursor="hand2")
+        github_link.pack()
+        github_link.bind("<Button-1>", lambda e: self._open_github_link())
+        
+        # Close button
+        close_button = ttk.Button(main_frame, text="Close", command=info_window.destroy)
+        close_button.pack(pady=(10, 0))
+        
+        # Focus the window
+        info_window.focus()
+
+    def _open_github_link(self):
+        """Open GitHub link in default browser"""
+        import webbrowser
+        webbrowser.open("https://github.com/lrncrd/PyPotteryLayout")
 
     def _create_header(self, parent):
         """Create application header with icon and title"""
@@ -183,97 +400,112 @@ class LayoutApp(tk.Tk):
         parent.columnconfigure(1, weight=1)
 
     def _create_layout_widgets(self, parent):
-        left_frame = ttk.Frame(parent)
-        left_frame.grid(row=0, column=0, sticky=NSEW, padx=5)
-        right_frame = ttk.Frame(parent)
-        right_frame.grid(row=0, column=1, sticky=NSEW, padx=5, ipadx=20)
-        parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=1)
+        # Single column layout for cleaner organization
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=5)
 
-        # Left Column
-        ttk.Label(left_frame, text="Mode:").pack(anchor=W, pady=(0,2))
-        ttk.Radiobutton(left_frame, text="Grid Layout", variable=self.vars['mode'], value="grid", command=self._update_ui_for_mode).pack(anchor=W)
-        ttk.Radiobutton(left_frame, text="Puzzle (Optimized)", variable=self.vars['mode'], value="puzzle", command=self._update_ui_for_mode).pack(anchor=W)
+        # Mode selection
+        mode_frame = ttk.Labelframe(main_frame, text="Layout Mode", padding="10")
+        mode_frame.pack(fill=X, expand=NO, pady=5)
 
-        ttk.Label(left_frame, text="Page Format:").pack(anchor=W, pady=(10,2))
-        self.page_size_combo = ttk.Combobox(left_frame, textvariable=self.vars['page_size'], values=["A4", "A3"], state='readonly')
-        self.page_size_combo.pack(fill=X)
-        
-        ttk.Label(left_frame, text="Primary Sorting:").pack(anchor=W, pady=(10,2))
-        self.sort_by_combo = ttk.Combobox(left_frame, textvariable=self.vars['sort_by'], state='readonly')
-        self.sort_by_combo.pack(fill=X)
-        
-        ttk.Label(left_frame, text="Secondary Sorting:").pack(anchor=W, pady=(10,2))
-        self.sort_by_secondary_combo = ttk.Combobox(left_frame, textvariable=self.vars['sort_by_secondary'], state='readonly')
-        self.sort_by_secondary_combo.pack(fill=X)
+        ttk.Radiobutton(mode_frame, text="Grid Layout", variable=self.vars['mode'], value="grid", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
+        ttk.Radiobutton(mode_frame, text="Puzzle (Optimized)", variable=self.vars['mode'], value="puzzle", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
+        ttk.Radiobutton(mode_frame, text="Masonry Layout", variable=self.vars['mode'], value="masonry", command=self._update_ui_for_mode).pack(anchor=W, pady=2)
 
-        # Right Column (Grid-specific)
-        self.grid_frame = ttk.Frame(right_frame)
-        self.grid_frame.pack(fill=X)
-        ttk.Label(self.grid_frame, text="Grid Rows:").grid(row=0, column=0, sticky=W)
-        ttk.Spinbox(self.grid_frame, from_=1, to=100, textvariable=self.vars['grid_rows']).grid(row=0, column=1, sticky=EW, padx=5)
-        ttk.Label(self.grid_frame, text="Grid Columns:").grid(row=1, column=0, sticky=W)
-        ttk.Spinbox(self.grid_frame, from_=1, to=100, textvariable=self.vars['grid_cols']).grid(row=1, column=1, sticky=EW, padx=5)
-        self.grid_frame.columnconfigure(1, weight=1)
-        
-    def _create_details_widgets(self, parent):
-        f1 = ttk.Frame(parent)
-        f1.grid(row=0, column=0, sticky=NSEW, padx=5)
-        f2 = ttk.Frame(parent)
-        f2.grid(row=0, column=1, sticky=NSEW, padx=5)
-        f3 = ttk.Frame(parent)
-        f3.grid(row=0, column=2, sticky=NSEW, padx=5)
-        parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=1)
-        parent.columnconfigure(2, weight=1)
-        
-        # Column 1
-        ttk.Label(f1, text="Image Scale:").pack(anchor=W)
-        # Frame for combined scale controls
-        scale_frame = ttk.Frame(f1)
-        scale_frame.pack(fill=X, pady=2)
-        
-        # Entry for manual value input
-        self.scale_entry = ttk.Entry(scale_frame, textvariable=self.vars['scale_factor'], width=6)
-        self.scale_entry.pack(side=tk.LEFT)
+        # Page settings
+        page_frame = ttk.Labelframe(main_frame, text="Page Settings", padding="10")
+        page_frame.pack(fill=X, expand=NO, pady=5)
+
+        ttk.Label(page_frame, text="Page Format:").grid(row=0, column=0, sticky=W, padx=5, pady=2)
+        self.page_size_combo = ttk.Combobox(page_frame, textvariable=self.vars['page_size'], values=["A4", "A3"], state='readonly', width=15)
+        self.page_size_combo.grid(row=0, column=1, sticky=W, padx=5, pady=2)
+
+        ttk.Label(page_frame, text="Page Margin (px):").grid(row=1, column=0, sticky=W, padx=5, pady=2)
+        ttk.Spinbox(page_frame, from_=0, to=500, textvariable=self.vars['margin_px'], width=15).grid(row=1, column=1, sticky=W, padx=5, pady=2)
+
+        ttk.Label(page_frame, text="Image Spacing (px):").grid(row=2, column=0, sticky=W, padx=5, pady=2)
+        ttk.Spinbox(page_frame, from_=0, to=200, textvariable=self.vars['spacing_px'], width=15).grid(row=2, column=1, sticky=W, padx=5, pady=2)
+
+        ttk.Checkbutton(page_frame, text="Show Margin Border", variable=self.vars['show_margin_border']).grid(row=3, column=0, columnspan=2, sticky=W, padx=5, pady=5)
+
+        page_frame.columnconfigure(1, weight=1)
+
+        # Sorting options
+        sort_frame = ttk.Labelframe(main_frame, text="Sorting Options", padding="10")
+        sort_frame.pack(fill=X, expand=NO, pady=5)
+
+        ttk.Label(sort_frame, text="Primary Sorting:").grid(row=0, column=0, sticky=W, padx=5, pady=2)
+        self.sort_by_combo = ttk.Combobox(sort_frame, textvariable=self.vars['sort_by'], state='readonly', width=20)
+        self.sort_by_combo.grid(row=0, column=1, sticky=EW, padx=5, pady=2)
+
+        ttk.Label(sort_frame, text="Secondary Sorting:").grid(row=1, column=0, sticky=W, padx=5, pady=2)
+        self.sort_by_secondary_combo = ttk.Combobox(sort_frame, textvariable=self.vars['sort_by_secondary'], state='readonly', width=20)
+        self.sort_by_secondary_combo.grid(row=1, column=1, sticky=EW, padx=5, pady=2)
+
+        sort_frame.columnconfigure(1, weight=1)
+
+        # Scale settings
+        scale_frame = ttk.Labelframe(main_frame, text="Image Scale", padding="10")
+        scale_frame.pack(fill=X, expand=NO, pady=5)
+
+        # Combined scale controls
+        controls_frame = ttk.Frame(scale_frame)
+        controls_frame.pack(fill=X)
+
+        self.scale_entry = ttk.Entry(controls_frame, textvariable=self.vars['scale_factor'], width=6)
+        self.scale_entry.pack(side=tk.LEFT, padx=(0, 5))
         self.scale_entry.bind('<Return>', self._on_scale_entry_change)
         self.scale_entry.bind('<FocusOut>', self._on_scale_entry_change)
-        
-        # Slider for visual control
-        self.scale_slider = ttk.Scale(scale_frame, from_=0.1, to=3.0, variable=self.vars['scale_factor'], 
-                                     orient=HORIZONTAL, command=self._on_scale_change)
-        self.scale_slider.pack(side=tk.LEFT, fill=X, expand=True, padx=(5,0))
-        
-        # Label to show current value
-        self.scale_label = ttk.Label(f1, textvariable=self.scale_display)
-        self.scale_label.pack(anchor=W)
-        
-        # Note: DPI is fixed at 300, control hidden
-        
-        # Column 2
-        ttk.Label(f2, text="Page Margin (px):").pack(anchor=W)
-        ttk.Spinbox(f2, from_=0, to=500, textvariable=self.vars['margin_px']).pack(fill=X, pady=2)
-        
-        ttk.Checkbutton(f2, text="Show Margin Border", variable=self.vars['show_margin_border']).pack(anchor=W, pady=(5,0))
-        
-        ttk.Label(f2, text="Spacing Between Images (px):").pack(anchor=W, pady=(10,0))
-        ttk.Spinbox(f2, from_=0, to=200, textvariable=self.vars['spacing_px']).pack(fill=X, pady=2)
 
-        # Column 3
-        ttk.Checkbutton(f3, text="Add Captions", variable=self.vars['add_caption']).pack(anchor=W)
+        self.scale_slider = ttk.Scale(controls_frame, from_=0.1, to=3.0, variable=self.vars['scale_factor'],
+                                     orient=HORIZONTAL, command=self._on_scale_change)
+        self.scale_slider.pack(side=tk.LEFT, fill=X, expand=True)
+
+        self.scale_label = ttk.Label(controls_frame, textvariable=self.scale_display)
+        self.scale_label.pack(side=tk.LEFT, padx=(5, 0))
+
+        # Caption settings
+        caption_frame = ttk.Labelframe(main_frame, text="Caption Settings", padding="10")
+        caption_frame.pack(fill=X, expand=NO, pady=5)
+
+        ttk.Checkbutton(caption_frame, text="Add Captions", variable=self.vars['add_caption']).pack(anchor=W, pady=2)
+
+        # Note: Grid frame will be created but managed elsewhere
+        self.grid_frame = ttk.Frame(parent)
+        # Don't pack it here
         
-        # Font Size for captions
-        ttk.Label(f3, text="Font Size:").pack(anchor=W, pady=(5,0))
-        ttk.Spinbox(f3, from_=8, to=48, textvariable=self.vars['caption_font_size']).pack(fill=X, pady=2)
+    def _create_details_widgets(self, parent):
+        # Table numbering section
+        table_frame = ttk.Labelframe(parent, text="Table Numbering", padding="10")
+        table_frame.pack(fill=X, expand=NO, pady=5)
         
-        ttk.Checkbutton(f3, text="Add Scale Bar", variable=self.vars['add_scale_bar']).pack(anchor=W, pady=(10,0))
+        # Enable table numbering checkbox
+        ttk.Checkbutton(table_frame, text="Add Table Numbers", variable=self.vars['add_table_number']).pack(anchor=W, pady=2)
         
-        # Scale bar parameters
-        ttk.Label(f3, text="Scale Bar (cm):").pack(anchor=W, pady=(5,0))
-        ttk.Spinbox(f3, from_=1, to=50, textvariable=self.vars['scale_bar_cm']).pack(fill=X, pady=2)
+        # Table numbering settings in a grid
+        settings_frame = ttk.Frame(table_frame)
+        settings_frame.pack(fill=X, pady=5)
         
-        ttk.Label(f3, text="Pixels per cm:").pack(anchor=W, pady=(5,0))
-        ttk.Spinbox(f3, from_=10, to=500, textvariable=self.vars['pixels_per_cm']).pack(fill=X, pady=2)
+        # Starting number
+        ttk.Label(settings_frame, text="Start Number:").grid(row=0, column=0, sticky=W, padx=5, pady=2)
+        ttk.Spinbox(settings_frame, from_=1, to=999, textvariable=self.vars['table_start_number'], width=10).grid(row=0, column=1, sticky=W, padx=5, pady=2)
+        
+        # Font size
+        ttk.Label(settings_frame, text="Font Size:").grid(row=0, column=2, sticky=W, padx=5, pady=2)
+        ttk.Spinbox(settings_frame, from_=8, to=48, textvariable=self.vars['table_font_size'], width=10).grid(row=0, column=3, sticky=W, padx=5, pady=2)
+        
+        # Position selection
+        ttk.Label(settings_frame, text="Position:").grid(row=1, column=0, sticky=W, padx=5, pady=2)
+        position_combo = ttk.Combobox(settings_frame, textvariable=self.vars['table_position'], 
+                                     values=["top_left", "top_right", "bottom_left", "bottom_right"], 
+                                     state='readonly', width=15)
+        position_combo.grid(row=1, column=1, columnspan=2, sticky=W, padx=5, pady=2)
+        
+        # Table prefix
+        ttk.Label(settings_frame, text="Prefix:").grid(row=2, column=0, sticky=W, padx=5, pady=2)
+        ttk.Entry(settings_frame, textvariable=self.vars['table_prefix'], width=15).grid(row=2, column=1, sticky=W, padx=5, pady=2)
+        
+        settings_frame.columnconfigure(1, weight=1)
 
     def _browse_input_folder(self):
         folder = filedialog.askdirectory(title="Select Images Folder")
@@ -342,14 +574,14 @@ class LayoutApp(tk.Tk):
         
         # Show info about editable formats
         if format_value == "SVG":
-            self._update_log("✨ SVG Export: Creates lightweight, fully editable files!")
-            self._update_log("   • Small file sizes (images linked externally)")
-            self._update_log("   • Each element is separately editable")
-            self._update_log("   • Compatible with all vector editors")
+            self._update_log("✨ SVG Export: Creates lightweight, fully editable files!", "success")
+            self._update_log("   • Small file sizes (images linked externally)", "info")
+            self._update_log("   • Each element is separately editable", "info")
+            self._update_log("   • Compatible with all vector editors", "info")
         elif format_value == "PDF":
-            self._update_log("📄 PDF Export: Creates final publication-ready files")
-            self._update_log("   • High-quality immutable output")
-            self._update_log("   • Perfect for printing and distribution")
+            self._update_log("📄 PDF Export: Creates final publication-ready files", "header")
+            self._update_log("   • High-quality immutable output", "info")
+            self._update_log("   • Perfect for printing and distribution", "info")
 
     def _update_sort_options(self):
         metadata_file = self.vars['metadata_file'].get()
@@ -374,10 +606,10 @@ class LayoutApp(tk.Tk):
             self.vars['sort_by_secondary'].set("none")
 
     def _update_ui_for_mode(self):
-        if self.vars['mode'].get() == "grid":
-            self.grid_frame.pack(fill=X)
-        else:
-            self.grid_frame.pack_forget()
+        # Grid controls are now in the preview controls section
+        mode = self.vars['mode'].get()
+        # Manual mode temporarily disabled
+        self._disable_manual_mode()
 
     def _on_scale_change(self, value):
         """Callback when scale slider changes."""
@@ -407,11 +639,56 @@ class LayoutApp(tk.Tk):
             self.scale_entry.insert(0, str(current_value))
             self.scale_display.set(f"{current_value:.2f}x")
 
-    def _update_log(self, message):
-        self.log_text.config(state='normal')
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END) # Auto-scroll
-        self.log_text.config(state='disabled')
+    def _create_terminal_log(self, parent):
+        """Create terminal-style log at the bottom."""
+        log_frame = ttk.Labelframe(parent, text="Terminal Output", padding="5")
+        log_frame.pack(fill=BOTH, expand=NO, padx=5, pady=(0, 5))
+
+        # Container for text and scrollbar
+        terminal_container = ttk.Frame(log_frame)
+        terminal_container.pack(fill=BOTH, expand=True)
+
+        # Create text widget with terminal styling (much taller for better readability)
+        self.log_text = tk.Text(terminal_container, height=15, wrap=tk.WORD,
+                                bg="black", fg="#00ff00",
+                                insertbackground="#00ff00",
+                                font=("Courier", 11),
+                                relief="sunken", borderwidth=2)
+
+        # Add scrollbar outside the text widget
+        log_scrollbar = ttk.Scrollbar(terminal_container, orient="vertical", command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
+
+        # Pack scrollbar first, then text widget
+        log_scrollbar.pack(side=RIGHT, fill=Y)
+        self.log_text.pack(side=LEFT, fill=BOTH, expand=True)
+
+        # Configure text tags for different message types
+        self.log_text.tag_configure("info", foreground="#00ff00")  # Green
+        self.log_text.tag_configure("warning", foreground="#ffff00")  # Yellow
+        self.log_text.tag_configure("error", foreground="#ff0000")  # Red
+        self.log_text.tag_configure("success", foreground="#00ffff")  # Cyan
+        self.log_text.tag_configure("header", foreground="#ff00ff")  # Magenta
+
+        # Initial message
+        self._update_log("[SYSTEM] PyPotteryLayout Terminal Ready", "header")
+        self._update_log("[INFO] Waiting for user input...", "info")
+
+    def _update_log(self, message, tag="info"):
+        """Update terminal-style log with colored output."""
+        # Determine tag based on message content if not specified
+        if tag == "info":
+            if "ERROR" in message or "CRITICAL" in message:
+                tag = "error"
+            elif "WARNING" in message or "⚠" in message:
+                tag = "warning"
+            elif "SUCCESS" in message or "✓" in message or "✨" in message:
+                tag = "success"
+            elif "📄" in message or "Processing" in message:
+                tag = "header"
+
+        self.log_text.insert(tk.END, f"> {message}\n", tag)
+        self.log_text.see(tk.END)  # Auto-scroll
         self.update_idletasks()
 
     def _start_process(self):
@@ -428,9 +705,8 @@ class LayoutApp(tk.Tk):
             return
             
         self.run_button.config(state='disabled', text="Processing...")
-        self.log_text.config(state='normal')
         self.log_text.delete('1.0', tk.END)
-        self.log_text.config(state='disabled')
+        self._update_log("[SYSTEM] Starting layout process...", "header")
 
         # Run backend in separate thread to avoid blocking GUI
         thread = threading.Thread(target=self._run_backend_in_thread, args=(params,))
@@ -438,13 +714,644 @@ class LayoutApp(tk.Tk):
 
     def _run_backend_in_thread(self, params):
         try:
+            # Add manual positions if in manual mode
+            if params['mode'] == 'manual' and self.manual_positions:
+                params['manual_positions'] = self.manual_positions
+
             backend_logic.run_layout_process(params, self._update_log)
             messagebox.showinfo("Success", f"Process completed!\nFile saved to:\n{params['output_file']}")
         except Exception as e:
             self._update_log(f"CRITICAL ERROR: {e}")
             messagebox.showerror("Error", f"An error occurred during processing:\n\n{e}")
         finally:
-            self.run_button.config(state='normal', text="Start Layout Process")
+            self.run_button.config(state='normal', text="Export Layout")
+
+    def _open_output_folder(self):
+        """Open the output folder in the system file manager."""
+        output_file = self.vars['output_file'].get()
+        if not output_file:
+            messagebox.showwarning("Warning", "No output file specified. Please set an output file first.")
+            return
+        
+        from pathlib import Path
+        import subprocess
+        import platform
+        
+        output_path = Path(output_file)
+        export_dir = output_path.parent / "export"
+        
+        # Create export directory if it doesn't exist
+        export_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            # Open the folder using system-appropriate command
+            system = platform.system()
+            if system == "Darwin":  # macOS
+                subprocess.run(["open", str(export_dir)], check=True)
+            elif system == "Windows":
+                subprocess.run(["explorer", str(export_dir)], check=True)
+            else:  # Linux and others
+                subprocess.run(["xdg-open", str(export_dir)], check=True)
+        except subprocess.CalledProcessError:
+            messagebox.showerror("Error", f"Could not open folder: {export_dir}")
+        except FileNotFoundError:
+            messagebox.showerror("Error", "Could not find system file manager.")
+        
+        self._update_log(f"📁 Opened output folder: {export_dir}", "info")
+
+    def _create_preview_panel(self, parent):
+        """Create the preview panel for layout visualization."""
+        # Preview title and controls
+        preview_header = ttk.Frame(parent)
+        preview_header.pack(fill=X, padx=10, pady=5)
+
+        ttk.Label(preview_header, text="Layout Preview", font=("Arial", 12, "bold")).pack(side=LEFT)
+        ttk.Button(preview_header, text="Refresh Preview", command=self._update_preview).pack(side=RIGHT, padx=5)
+
+        # Create scrollable preview area
+        preview_container = ttk.Frame(parent)
+        preview_container.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # Canvas for preview with scrollbars
+        self.preview_canvas = tk.Canvas(preview_container, bg="white", relief="sunken", borderwidth=2)
+        preview_vscroll = ttk.Scrollbar(preview_container, orient="vertical", command=self.preview_canvas.yview)
+        preview_hscroll = ttk.Scrollbar(preview_container, orient="horizontal", command=self.preview_canvas.xview)
+
+        self.preview_canvas.configure(
+            yscrollcommand=preview_vscroll.set,
+            xscrollcommand=preview_hscroll.set
+        )
+
+        # Pack scrollbars and canvas
+        preview_vscroll.pack(side="right", fill="y")
+        preview_hscroll.pack(side="bottom", fill="x")
+        self.preview_canvas.pack(side="left", fill="both", expand=True)
+        
+        # Bind canvas resize event to update preview
+        self.preview_canvas.bind("<Configure>", lambda event: self.after_idle(self._update_preview))
+
+        # Info label for preview status
+        self.preview_info = ttk.Label(parent, text="No images loaded", foreground="gray")
+        self.preview_info.pack(fill=X, padx=10, pady=(0, 5))
+
+    def _create_preview_controls(self, parent):
+        """Create control panel under the preview."""
+        controls_frame = ttk.Labelframe(parent, text="Preview Controls", padding="10")
+        controls_frame.pack(fill=X, padx=10, pady=(0, 10))
+
+        # Create three columns for controls
+        col1 = ttk.Frame(controls_frame)
+        col1.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        col2 = ttk.Frame(controls_frame)
+        col2.grid(row=0, column=1, sticky="nsew", padx=10)
+        col3 = ttk.Frame(controls_frame)
+        col3.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
+
+        controls_frame.columnconfigure(0, weight=1)
+        controls_frame.columnconfigure(1, weight=1)
+        controls_frame.columnconfigure(2, weight=1)
+
+        # Column 1: Grid controls
+        grid_label = ttk.Label(col1, text="Grid Settings:", font=("Arial", 10, "bold"))
+        grid_label.pack(anchor=W, pady=(0, 5))
+
+        grid_rows_frame = ttk.Frame(col1)
+        grid_rows_frame.pack(fill=X, pady=2)
+        ttk.Label(grid_rows_frame, text="Rows:").pack(side=LEFT)
+        ttk.Spinbox(grid_rows_frame, from_=1, to=100, textvariable=self.vars['grid_rows'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        grid_cols_frame = ttk.Frame(col1)
+        grid_cols_frame.pack(fill=X, pady=2)
+        ttk.Label(grid_cols_frame, text="Columns:").pack(side=LEFT)
+        ttk.Spinbox(grid_cols_frame, from_=1, to=100, textvariable=self.vars['grid_cols'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        # Column 2: Caption controls
+        caption_label = ttk.Label(col2, text="Caption Settings:", font=("Arial", 10, "bold"))
+        caption_label.pack(anchor=W, pady=(0, 5))
+
+        font_frame = ttk.Frame(col2)
+        font_frame.pack(fill=X, pady=2)
+        ttk.Label(font_frame, text="Font Size:").pack(side=LEFT)
+        ttk.Spinbox(font_frame, from_=8, to=48, textvariable=self.vars['caption_font_size'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        padding_frame = ttk.Frame(col2)
+        padding_frame.pack(fill=X, pady=2)
+        ttk.Label(padding_frame, text="Padding:").pack(side=LEFT)
+        ttk.Spinbox(padding_frame, from_=0, to=20, textvariable=self.vars['caption_padding'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        # Column 3: Scale bar controls
+        scale_label = ttk.Label(col3, text="Scale Bar Settings:", font=("Arial", 10, "bold"))
+        scale_label.pack(anchor=W, pady=(0, 5))
+
+        ttk.Checkbutton(col3, text="Add Scale Bar", variable=self.vars['add_scale_bar']).pack(anchor=W, pady=2)
+
+        scalebar_frame = ttk.Frame(col3)
+        scalebar_frame.pack(fill=X, pady=2)
+        ttk.Label(scalebar_frame, text="Length (cm):").pack(side=LEFT)
+        ttk.Spinbox(scalebar_frame, from_=1, to=50, textvariable=self.vars['scale_bar_cm'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        pixels_frame = ttk.Frame(col3)
+        pixels_frame.pack(fill=X, pady=2)
+        ttk.Label(pixels_frame, text="Pixels/cm:").pack(side=LEFT)
+        ttk.Spinbox(pixels_frame, from_=10, to=500, textvariable=self.vars['pixels_per_cm'], width=10).pack(side=LEFT, padx=(5, 0))
+
+    def _setup_preview_bindings(self):
+        """Bind variable changes to preview updates with debouncing."""
+        # Track changes for preview update
+        for key, var in self.vars.items():
+            if key not in ['output_file', 'metadata_file']:  # Skip non-layout parameters
+                if isinstance(var, (tk.StringVar, tk.IntVar, tk.DoubleVar, tk.BooleanVar)):
+                    var.trace('w', lambda *args: self._schedule_preview_update())
+
+        # Also update preview when folder is selected
+        self.vars['input_folder'].trace('w', lambda *args: self._load_preview_images())
+
+    def _schedule_preview_update(self):
+        """Schedule a preview update with debouncing to avoid too frequent updates."""
+        if self.preview_update_timer:
+            self.after_cancel(self.preview_update_timer)
+
+        # Schedule update after 500ms of no changes
+        self.preview_update_timer = self.after(500, self._update_preview)
+
+    def _load_preview_images(self):
+        """Load thumbnail images for preview."""
+        folder = self.vars['input_folder'].get()
+        if not folder or not os.path.isdir(folder):
+            self.preview_images = []
+            self.preview_info.config(text="No images loaded")
+            return
+
+        # Find image files
+        image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')
+        image_files = []
+        for file in os.listdir(folder):
+            if file.lower().endswith(image_extensions):
+                image_files.append(os.path.join(folder, file))
+
+        # Load thumbnails (limit to first 20 for performance)
+        self.preview_images = []
+        max_images = min(20, len(image_files))
+
+        for i in range(max_images):
+            try:
+                img = Image.open(image_files[i])
+                # Create small thumbnail for preview
+                img.thumbnail((150, 150), Image.Resampling.LANCZOS)
+                self.preview_images.append((image_files[i], img))
+            except Exception as e:
+                print(f"Error loading image {image_files[i]}: {e}")
+
+        self.preview_info.config(text=f"Loaded {len(self.preview_images)} of {len(image_files)} images for preview")
+        self._update_preview()
+
+    def _update_preview(self):
+        """Update the preview canvas with current layout settings."""
+        if not self.preview_images:
+            return
+
+        # Clear canvas
+        self.preview_canvas.delete("all")
+
+        # Get page dimensions in preview scale
+        page_size = self.vars['page_size'].get()
+        page_width, page_height = backend_logic.get_page_dimensions_px(page_size)
+        
+        # Get canvas actual size
+        self.preview_canvas.update_idletasks()  # Ensure canvas is properly sized
+        canvas_actual_width = self.preview_canvas.winfo_width()
+        canvas_actual_height = self.preview_canvas.winfo_height()
+        
+        # Calculate scale to fit entire page in canvas with some padding
+        padding = 20  # Padding around the page
+        
+        # Only calculate new scale if canvas has reasonable dimensions
+        if canvas_actual_width > 100 and canvas_actual_height > 100:
+            scale_w = (canvas_actual_width - 2 * padding) / page_width
+            scale_h = (canvas_actual_height - 2 * padding) / page_height
+            preview_scale = min(scale_w, scale_h, 0.4)  # Increased max scale to 0.4 for better visibility
+        else:
+            # Fallback scale
+            preview_scale = 0.2
+        
+        # Calculate centered page dimensions
+        canvas_width = int(page_width * preview_scale)
+        canvas_height = int(page_height * preview_scale)
+        
+        # Center the page in the canvas
+        offset_x = (canvas_actual_width - canvas_width) // 2
+        offset_y = (canvas_actual_height - canvas_height) // 2
+        
+        # Ensure minimum offset
+        offset_x = max(padding, offset_x)
+        offset_y = max(padding, offset_y)
+
+        # Draw page background (centered)
+        self.preview_canvas.create_rectangle(
+            offset_x, offset_y, 
+            offset_x + canvas_width, offset_y + canvas_height,
+            fill="white", outline="black", width=2, tags="page_background"
+        )
+
+        # Draw margins if enabled
+        margin = int(self.vars['margin_px'].get() * preview_scale)
+        if self.vars['show_margin_border'].get() and margin > 0:
+            self.preview_canvas.create_rectangle(
+                offset_x + margin, offset_y + margin,
+                offset_x + canvas_width - margin, offset_y + canvas_height - margin,
+                outline="gray", dash=(5, 5), tags="page_margin"
+            )
+
+        # Layout images based on mode
+        mode = self.vars['mode'].get()
+        spacing = int(self.vars['spacing_px'].get() * preview_scale)
+        scale_factor = self.vars['scale_factor'].get()
+
+        if mode == "grid":
+            self._preview_grid_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale, offset_x, offset_y)
+        elif mode == "puzzle":
+            self._preview_puzzle_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale, offset_x, offset_y)
+        elif mode == "masonry":
+            self._preview_masonry_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale, offset_x, offset_y)
+
+        # Update scroll region to show the entire content
+        all_items = self.preview_canvas.find_all()
+        if all_items:
+            bbox = self.preview_canvas.bbox("all")
+            # Add some padding around the content
+            padding_extra = 20
+            scroll_region = (
+                bbox[0] - padding_extra, 
+                bbox[1] - padding_extra, 
+                bbox[2] + padding_extra, 
+                bbox[3] + padding_extra
+            )
+            self.preview_canvas.configure(scrollregion=scroll_region)
+        else:
+            # Default scroll region
+            self.preview_canvas.configure(scrollregion=(0, 0, canvas_actual_width, canvas_actual_height))
+
+    def _preview_grid_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale, offset_x, offset_y):
+        """Preview grid layout with image thumbnails."""
+        # Store PhotoImage references to prevent garbage collection
+        self.preview_photo_images = []
+
+        rows = self.vars['grid_rows'].get()
+        cols = self.vars['grid_cols'].get()
+
+        available_width = canvas_width - 2 * margin
+        available_height = canvas_height - 2 * margin
+
+        cell_width = (available_width - (cols - 1) * spacing) / cols
+        cell_height = (available_height - (rows - 1) * spacing) / rows
+
+        img_idx = 0
+        for row in range(rows):
+            for col in range(cols):
+                if img_idx >= len(self.preview_images):
+                    break
+
+                x = offset_x + margin + col * (cell_width + spacing)
+                y = offset_y + margin + row * (cell_height + spacing)
+
+                # Get the image
+                path, img = self.preview_images[img_idx]
+
+                try:
+                    # Calculate image size to fit cell while maintaining aspect ratio
+                    img_ratio = img.width / img.height
+                    cell_ratio = cell_width / cell_height
+
+                    if img_ratio > cell_ratio:
+                        # Image is wider - fit to width
+                        new_width = int(cell_width * 0.9)  # 90% of cell width
+                        new_height = int(new_width / img_ratio)
+                    else:
+                        # Image is taller - fit to height
+                        new_height = int(cell_height * 0.9)  # 90% of cell height
+                        new_width = int(new_height * img_ratio)
+
+                    # Resize image
+                    preview_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)
+
+                    # Center image in cell
+                    img_x = x + (cell_width - new_width) / 2
+                    img_y = y + (cell_height - new_height) / 2
+
+                    # Draw border for cell
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + cell_width, y + cell_height,
+                        fill="white", outline="gray", width=1
+                    )
+
+                    # Place image
+                    self.preview_canvas.create_image(
+                        img_x, img_y,
+                        anchor="nw",
+                        image=photo
+                    )
+                except Exception:
+                    # Fallback to numbered rectangle
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + cell_width, y + cell_height,
+                        fill="lightgray", outline="darkgray"
+                    )
+                    self.preview_canvas.create_text(
+                        x + cell_width/2, y + cell_height/2,
+                        text=f"{img_idx + 1}",
+                        font=("Arial", 12)
+                    )
+
+                img_idx += 1
+
+    def _preview_puzzle_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale, offset_x, offset_y):
+        """Preview puzzle/optimized layout with image thumbnails."""
+        # Store PhotoImage references
+        self.preview_photo_images = []
+
+        available_width = canvas_width - 2 * margin
+        available_height = canvas_height - 2 * margin
+
+        # Much larger scale for better visibility
+        enhanced_scale = scale_factor * preview_scale * 7.0  # 7x larger
+
+        # Simple rectangle packing visualization
+        x = margin
+        y = margin
+        row_height = 0
+
+        for idx, (path, img) in enumerate(self.preview_images):
+            # Scale image size with enhanced scale
+            img_width = int(img.width * enhanced_scale)
+            img_height = int(img.height * enhanced_scale)
+
+            # Check if image fits in current row
+            if x + img_width > canvas_width - margin:
+                x = margin
+                y += row_height + spacing
+                row_height = 0
+
+            # Draw image if it fits on page
+            if y + img_height <= canvas_height - margin:
+                try:
+                    # Create thumbnail
+                    preview_img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)
+
+                    # Draw background (with offset)
+                    self.preview_canvas.create_rectangle(
+                        offset_x + x, offset_y + y, 
+                        offset_x + x + img_width, offset_y + y + img_height,
+                        fill="white", outline="darkblue", width=2
+                    )
+
+                    # Place image (with offset)
+                    self.preview_canvas.create_image(
+                        offset_x + x, offset_y + y,
+                        anchor="nw",
+                        image=photo
+                    )
+                except Exception:
+                    # Fallback (with offset)
+                    self.preview_canvas.create_rectangle(
+                        offset_x + x, offset_y + y, 
+                        offset_x + x + img_width, offset_y + y + img_height,
+                        fill="lightblue", outline="darkblue"
+                    )
+                    self.preview_canvas.create_text(
+                        offset_x + x + img_width/2, offset_y + y + img_height/2,
+                        text=f"{idx + 1}",
+                        font=("Arial", 14)
+                    )
+
+                row_height = max(row_height, img_height)
+                x += img_width + spacing
+
+    def _preview_masonry_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale, offset_x, offset_y):
+        """Preview masonry layout with image thumbnails."""
+        # Store PhotoImage references
+        self.preview_photo_images = []
+
+        cols = self.vars['grid_cols'].get() if self.vars['mode'].get() == "grid" else 3
+        available_width = canvas_width - 2 * margin
+        col_width = (available_width - (cols - 1) * spacing) / cols
+
+        # Track the current y position for each column
+        col_heights = [margin] * cols
+
+        for idx, (path, img) in enumerate(self.preview_images):
+            # Find the shortest column
+            min_col = col_heights.index(min(col_heights))
+
+            # Calculate position
+            x = margin + min_col * (col_width + spacing)
+            y = col_heights[min_col]
+
+            # Calculate proportional height based on aspect ratio
+            # Make images larger for better visibility
+            img_ratio = img.height / img.width
+            img_width = col_width * 0.95  # Use 95% of column width
+            img_height = img_width * img_ratio * scale_factor * 1.2  # 20% larger
+
+            # Draw image if it fits
+            if y + img_height <= canvas_height - margin:
+                try:
+                    # Create thumbnail
+                    new_width = int(img_width)
+                    new_height = int(img_height)
+                    preview_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)
+
+                    # Draw background (with offset)
+                    self.preview_canvas.create_rectangle(
+                        offset_x + x, offset_y + y, 
+                        offset_x + x + new_width, offset_y + y + new_height,
+                        fill="white", outline="orange", width=2
+                    )
+
+                    # Place image (with offset)
+                    self.preview_canvas.create_image(
+                        offset_x + x, offset_y + y,
+                        anchor="nw",
+                        image=photo
+                    )
+                except Exception:
+                    # Fallback (with offset)
+                    self.preview_canvas.create_rectangle(
+                        offset_x + x, offset_y + y, 
+                        offset_x + x + col_width, offset_y + y + img_height,
+                        fill="lightyellow", outline="orange"
+                    )
+                    self.preview_canvas.create_text(
+                        offset_x + x + col_width/2, offset_y + y + img_height/2,
+                        text=f"{idx + 1}",
+                        font=("Arial", 14)
+                    )
+
+                # Update column height
+                col_heights[min_col] = y + img_height + spacing
+
+    def _preview_manual_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
+        """Preview manual layout with drag-and-drop functionality."""
+        # Store PhotoImage references to prevent garbage collection
+        self.preview_photo_images = []
+
+        # Much larger scale for better visibility
+        enhanced_scale = scale_factor * preview_scale * 7.0  # 7x larger
+
+        # Initialize positions if empty
+        if not self.manual_positions:
+            # Place images in a simple grid initially
+            x = margin
+            y = margin
+            max_row_height = 0
+            items_in_row = 0
+
+            for idx, (path, img) in enumerate(self.preview_images):
+                img_width = int(img.width * enhanced_scale)
+                img_height = int(img.height * enhanced_scale)
+
+                # Check if we need to start a new row (max 2-3 items per row with larger images)
+                if x + img_width > canvas_width - margin or items_in_row >= 2:
+                    x = margin
+                    y += max_row_height + spacing * 3  # Extra spacing for larger images
+                    max_row_height = 0
+                    items_in_row = 0
+
+                self.manual_positions[idx] = (x, y, img_width, img_height)
+                max_row_height = max(max_row_height, img_height)
+                x += img_width + spacing * 3  # Extra spacing between larger images
+                items_in_row += 1
+
+        # Draw images at their manual positions
+        for idx, (path, img) in enumerate(self.preview_images):
+            if idx in self.manual_positions:
+                x, y, w, h = self.manual_positions[idx]
+
+                # Create thumbnail for preview
+                try:
+                    # Resize image to preview size
+                    preview_img = img.resize((int(w), int(h)), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)  # Keep reference
+
+                    # Create image on canvas
+                    self.preview_canvas.create_image(
+                        x, y,
+                        anchor="nw",
+                        image=photo,
+                        tags=(f"image_{idx}", "draggable")
+                    )
+
+                    # Add semi-transparent border for better visibility
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + w, y + h,
+                        fill="", outline="blue", width=2,
+                        tags=(f"image_{idx}", "draggable")
+                    )
+
+                except Exception:
+                    # Fallback to rectangle if image can't be displayed
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + w, y + h,
+                        fill="lightgray", outline="darkgray", width=2,
+                        tags=(f"image_{idx}", "draggable")
+                    )
+                    # Add image number as fallback
+                    self.preview_canvas.create_text(
+                        x + w/2, y + h/2,
+                        text=f"{idx + 1}",
+                        font=("Arial", 16),
+                        tags=(f"image_{idx}", "draggable")
+                    )
+
+    def _enable_manual_mode(self):
+        """Enable drag-and-drop functionality in preview canvas."""
+        self.preview_canvas.bind("<Button-1>", self._on_drag_start)
+        self.preview_canvas.bind("<B1-Motion>", self._on_drag_motion)
+        self.preview_canvas.bind("<ButtonRelease-1>", self._on_drag_release)
+        self.preview_canvas.config(cursor="hand2")
+
+    def _disable_manual_mode(self):
+        """Disable drag-and-drop functionality."""
+        self.preview_canvas.unbind("<Button-1>")
+        self.preview_canvas.unbind("<B1-Motion>")
+        self.preview_canvas.unbind("<ButtonRelease-1>")
+        self.preview_canvas.config(cursor="")
+
+    def _on_drag_start(self, event):
+        """Handle drag start for manual positioning."""
+        # Find which item was clicked
+        x = self.preview_canvas.canvasx(event.x)
+        y = self.preview_canvas.canvasy(event.y)
+
+        # Get the closest item with "draggable" tag
+        item = self.preview_canvas.find_closest(x, y)[0]
+        tags = self.preview_canvas.gettags(item)
+
+        if "draggable" in tags:
+            self.dragging_item = item
+            self.drag_start_x = x
+            self.drag_start_y = y
+
+            # Find image index from tags
+            for tag in tags:
+                if tag.startswith("image_"):
+                    self.dragging_index = int(tag.split("_")[1])
+                    break
+
+    def _on_drag_motion(self, event):
+        """Handle drag motion for manual positioning."""
+        if self.dragging_item:
+            x = self.preview_canvas.canvasx(event.x)
+            y = self.preview_canvas.canvasy(event.y)
+
+            dx = x - self.drag_start_x
+            dy = y - self.drag_start_y
+
+            # Move all items with the same image tag
+            tags = self.preview_canvas.gettags(self.dragging_item)
+            for tag in tags:
+                if tag.startswith("image_"):
+                    items = self.preview_canvas.find_withtag(tag)
+                    for item in items:
+                        self.preview_canvas.move(item, dx, dy)
+                    break
+
+            self.drag_start_x = x
+            self.drag_start_y = y
+
+    def _on_drag_release(self, event):
+        """Handle drag release for manual positioning."""
+        if self.dragging_item and hasattr(self, 'dragging_index'):
+            # Get the new position of the dragged item
+            tags = self.preview_canvas.gettags(self.dragging_item)
+            for tag in tags:
+                if tag.startswith("image_"):
+                    # Find all items with this tag and get the rectangle bounds
+                    items = self.preview_canvas.find_withtag(tag)
+                    for item in items:
+                        if self.preview_canvas.type(item) == "rectangle":
+                            x1, y1, x2, y2 = self.preview_canvas.coords(item)
+                            # Update stored position
+                            self.manual_positions[self.dragging_index] = (x1, y1, x2-x1, y2-y1)
+                            break
+                    break
+
+            self.dragging_item = None
+            delattr(self, 'dragging_index')
+            self._update_log(f"[INFO] Image {self.dragging_index + 1 if hasattr(self, 'dragging_index') else '?'} repositioned", "info")
+
+    def _browse_input_folder(self):
+        folder = filedialog.askdirectory(title="Select Images Folder")
+        if folder:
+            self.vars['input_folder'].set(folder)
+            self._update_sort_options()
+            self._load_preview_images()
 
 if __name__ == "__main__":
     app = LayoutApp()

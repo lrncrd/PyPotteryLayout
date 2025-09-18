@@ -107,14 +107,21 @@ IMG002.jpg  | Site B   | Medieval| Bowl fragment
 
 ## 📊 Recent Updates
 
-### v0.1.0 (Latest)
+### v0.1.1
+
+- Improved SVG export quality (all elements are now editable)
+- Added option to show table numbering
+- Added Masonry layout option (experimental)
+- Added preview of layout in GUI
+
+### v0.1.0
+
 - First public release with core features
 
 ## 🎯 Future Plans
 
-* [ ] Improving SVG export
-* [ ] Add Table numbering options
 * [ ] Add usage examples
+* [ ] We're looking for your suggestions!
 
 If you have suggestions or need help, please open an issue on GitHub!
 
@@ -130,6 +137,6 @@ If you have suggestions or need help, please open an issue on GitHub!
   <img src="https://contrib.rocks/image?repo=lrncrd/PyPotteryLayout" />
 </a>
 
-
+---
 
 Developed with ❤️ by [Lorenzo Cardarelli](https://github.com/lrncrd)
