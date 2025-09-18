@@ -753,7 +753,10 @@ class LayoutApp(tk.Tk):
         self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
 
     def _preview_grid_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
-        """Preview grid layout."""
+        """Preview grid layout with image thumbnails."""
+        # Store PhotoImage references to prevent garbage collection
+        self.preview_photo_images = []
+
         rows = self.vars['grid_rows'].get()
         cols = self.vars['grid_cols'].get()
 
@@ -772,25 +775,68 @@ class LayoutApp(tk.Tk):
                 x = margin + col * (cell_width + spacing)
                 y = margin + row * (cell_height + spacing)
 
-                # Draw image placeholder
-                self.preview_canvas.create_rectangle(
-                    x, y, x + cell_width, y + cell_height,
-                    fill="lightgray", outline="darkgray"
-                )
+                # Get the image
+                path, img = self.preview_images[img_idx]
 
-                # Add image number
-                self.preview_canvas.create_text(
-                    x + cell_width/2, y + cell_height/2,
-                    text=f"{img_idx + 1}",
-                    font=("Arial", int(12 * preview_scale * 5))
-                )
+                try:
+                    # Calculate image size to fit cell while maintaining aspect ratio
+                    img_ratio = img.width / img.height
+                    cell_ratio = cell_width / cell_height
+
+                    if img_ratio > cell_ratio:
+                        # Image is wider - fit to width
+                        new_width = int(cell_width * 0.9)  # 90% of cell width
+                        new_height = int(new_width / img_ratio)
+                    else:
+                        # Image is taller - fit to height
+                        new_height = int(cell_height * 0.9)  # 90% of cell height
+                        new_width = int(new_height * img_ratio)
+
+                    # Resize image
+                    preview_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)
+
+                    # Center image in cell
+                    img_x = x + (cell_width - new_width) / 2
+                    img_y = y + (cell_height - new_height) / 2
+
+                    # Draw border for cell
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + cell_width, y + cell_height,
+                        fill="white", outline="gray", width=1
+                    )
+
+                    # Place image
+                    self.preview_canvas.create_image(
+                        img_x, img_y,
+                        anchor="nw",
+                        image=photo
+                    )
+                except Exception:
+                    # Fallback to numbered rectangle
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + cell_width, y + cell_height,
+                        fill="lightgray", outline="darkgray"
+                    )
+                    self.preview_canvas.create_text(
+                        x + cell_width/2, y + cell_height/2,
+                        text=f"{img_idx + 1}",
+                        font=("Arial", 12)
+                    )
 
                 img_idx += 1
 
     def _preview_puzzle_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
-        """Preview puzzle/optimized layout using simple packing."""
+        """Preview puzzle/optimized layout with image thumbnails."""
+        # Store PhotoImage references
+        self.preview_photo_images = []
+
         available_width = canvas_width - 2 * margin
         available_height = canvas_height - 2 * margin
+
+        # Much larger scale for better visibility
+        enhanced_scale = scale_factor * preview_scale * 7.0  # 7x larger
 
         # Simple rectangle packing visualization
         x = margin
@@ -798,9 +844,9 @@ class LayoutApp(tk.Tk):
         row_height = 0
 
         for idx, (path, img) in enumerate(self.preview_images):
-            # Scale image size
-            img_width = int(img.width * scale_factor * preview_scale)
-            img_height = int(img.height * scale_factor * preview_scale)
+            # Scale image size with enhanced scale
+            img_width = int(img.width * enhanced_scale)
+            img_height = int(img.height * enhanced_scale)
 
             # Check if image fits in current row
             if x + img_width > canvas_width - margin:
@@ -808,25 +854,46 @@ class LayoutApp(tk.Tk):
                 y += row_height + spacing
                 row_height = 0
 
-            # Draw image placeholder
+            # Draw image if it fits on page
             if y + img_height <= canvas_height - margin:
-                self.preview_canvas.create_rectangle(
-                    x, y, x + img_width, y + img_height,
-                    fill="lightblue", outline="darkblue"
-                )
+                try:
+                    # Create thumbnail
+                    preview_img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)
 
-                # Add image number
-                self.preview_canvas.create_text(
-                    x + img_width/2, y + img_height/2,
-                    text=f"{idx + 1}",
-                    font=("Arial", int(10 * preview_scale * 5))
-                )
+                    # Draw background
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + img_width, y + img_height,
+                        fill="white", outline="darkblue", width=2
+                    )
+
+                    # Place image
+                    self.preview_canvas.create_image(
+                        x, y,
+                        anchor="nw",
+                        image=photo
+                    )
+                except Exception:
+                    # Fallback
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + img_width, y + img_height,
+                        fill="lightblue", outline="darkblue"
+                    )
+                    self.preview_canvas.create_text(
+                        x + img_width/2, y + img_height/2,
+                        text=f"{idx + 1}",
+                        font=("Arial", 14)
+                    )
 
                 row_height = max(row_height, img_height)
                 x += img_width + spacing
 
     def _preview_masonry_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
-        """Preview masonry layout (vertical columns with varied heights)."""
+        """Preview masonry layout with image thumbnails."""
+        # Store PhotoImage references
+        self.preview_photo_images = []
+
         cols = self.vars['grid_cols'].get() if self.vars['mode'].get() == "grid" else 3
         available_width = canvas_width - 2 * margin
         col_width = (available_width - (cols - 1) * spacing) / cols
@@ -842,63 +909,122 @@ class LayoutApp(tk.Tk):
             x = margin + min_col * (col_width + spacing)
             y = col_heights[min_col]
 
-            # Random height for masonry effect
-            img_height = int((50 + (idx * 37) % 100) * preview_scale)  # Varied heights
+            # Calculate proportional height based on aspect ratio
+            # Make images larger for better visibility
+            img_ratio = img.height / img.width
+            img_width = col_width * 0.95  # Use 95% of column width
+            img_height = img_width * img_ratio * scale_factor * 1.2  # 20% larger
 
-            # Draw image placeholder
+            # Draw image if it fits
             if y + img_height <= canvas_height - margin:
-                self.preview_canvas.create_rectangle(
-                    x, y, x + col_width, y + img_height,
-                    fill="lightyellow", outline="orange"
-                )
+                try:
+                    # Create thumbnail
+                    new_width = int(img_width)
+                    new_height = int(img_height)
+                    preview_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)
 
-                # Add image number
-                self.preview_canvas.create_text(
-                    x + col_width/2, y + img_height/2,
-                    text=f"{idx + 1}",
-                    font=("Arial", int(10 * preview_scale * 5))
-                )
+                    # Draw background
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + new_width, y + new_height,
+                        fill="white", outline="orange", width=2
+                    )
+
+                    # Place image
+                    self.preview_canvas.create_image(
+                        x, y,
+                        anchor="nw",
+                        image=photo
+                    )
+                except Exception:
+                    # Fallback
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + col_width, y + img_height,
+                        fill="lightyellow", outline="orange"
+                    )
+                    self.preview_canvas.create_text(
+                        x + col_width/2, y + img_height/2,
+                        text=f"{idx + 1}",
+                        font=("Arial", 14)
+                    )
 
                 # Update column height
                 col_heights[min_col] = y + img_height + spacing
 
     def _preview_manual_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
         """Preview manual layout with drag-and-drop functionality."""
+        # Store PhotoImage references to prevent garbage collection
+        self.preview_photo_images = []
+
+        # Much larger scale for better visibility
+        enhanced_scale = scale_factor * preview_scale * 7.0  # 7x larger
+
         # Initialize positions if empty
         if not self.manual_positions:
             # Place images in a simple grid initially
             x = margin
             y = margin
-            for idx, (path, img) in enumerate(self.preview_images):
-                img_width = int(img.width * scale_factor * preview_scale)
-                img_height = int(img.height * scale_factor * preview_scale)
+            max_row_height = 0
+            items_in_row = 0
 
-                if x + img_width > canvas_width - margin:
+            for idx, (path, img) in enumerate(self.preview_images):
+                img_width = int(img.width * enhanced_scale)
+                img_height = int(img.height * enhanced_scale)
+
+                # Check if we need to start a new row (max 2-3 items per row with larger images)
+                if x + img_width > canvas_width - margin or items_in_row >= 2:
                     x = margin
-                    y += 100 * preview_scale + spacing
+                    y += max_row_height + spacing * 3  # Extra spacing for larger images
+                    max_row_height = 0
+                    items_in_row = 0
 
                 self.manual_positions[idx] = (x, y, img_width, img_height)
-                x += img_width + spacing
+                max_row_height = max(max_row_height, img_height)
+                x += img_width + spacing * 3  # Extra spacing between larger images
+                items_in_row += 1
 
         # Draw images at their manual positions
         for idx, (path, img) in enumerate(self.preview_images):
             if idx in self.manual_positions:
                 x, y, w, h = self.manual_positions[idx]
 
-                # Create draggable rectangle
-                rect_id = self.preview_canvas.create_rectangle(
-                    x, y, x + w, y + h,
-                    fill="lightgreen", outline="darkgreen", width=2,
-                    tags=(f"image_{idx}", "draggable")
-                )
+                # Create thumbnail for preview
+                try:
+                    # Resize image to preview size
+                    preview_img = img.resize((int(w), int(h)), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(preview_img)
+                    self.preview_photo_images.append(photo)  # Keep reference
 
-                # Add image number
-                text_id = self.preview_canvas.create_text(
-                    x + w/2, y + h/2,
-                    text=f"{idx + 1}",
-                    font=("Arial", int(10 * preview_scale * 5)),
-                    tags=(f"image_{idx}", "draggable")
-                )
+                    # Create image on canvas
+                    self.preview_canvas.create_image(
+                        x, y,
+                        anchor="nw",
+                        image=photo,
+                        tags=(f"image_{idx}", "draggable")
+                    )
+
+                    # Add semi-transparent border for better visibility
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + w, y + h,
+                        fill="", outline="blue", width=2,
+                        tags=(f"image_{idx}", "draggable")
+                    )
+
+                except Exception:
+                    # Fallback to rectangle if image can't be displayed
+                    self.preview_canvas.create_rectangle(
+                        x, y, x + w, y + h,
+                        fill="lightgray", outline="darkgray", width=2,
+                        tags=(f"image_{idx}", "draggable")
+                    )
+                    # Add image number as fallback
+                    self.preview_canvas.create_text(
+                        x + w/2, y + h/2,
+                        text=f"{idx + 1}",
+                        font=("Arial", 16),
+                        tags=(f"image_{idx}", "draggable")
+                    )
 
     def _enable_manual_mode(self):
         """Enable drag-and-drop functionality in preview canvas."""
