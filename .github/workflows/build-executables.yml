@@ -19,7 +19,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -70,21 +70,57 @@ jobs:
 
     - name: Upload Windows artifact
       if: runner.os == 'Windows'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PyPotteryLayout-Windows
         path: PyPotteryLayout-Windows.zip
 
     - name: Upload macOS artifact
       if: runner.os == 'macOS'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PyPotteryLayout-macOS
         path: PyPotteryLayout-macOS.zip
 
     - name: Upload Linux artifact
       if: runner.os == 'Linux'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PyPotteryLayout-Linux
         path: PyPotteryLayout-Linux.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          PyPotteryLayout-Windows/PyPotteryLayout-Windows.zip
+          PyPotteryLayout-macOS/PyPotteryLayout-macOS.zip
+          PyPotteryLayout-Linux/PyPotteryLayout-Linux.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## PyPotteryLayout v2.0
+
+          ### Downloads
+          - **Windows**: PyPotteryLayout-Windows.zip
+          - **macOS**: PyPotteryLayout-macOS.zip
+          - **Linux**: PyPotteryLayout-Linux.zip
+
+          ### Authors
+          Lorenzo Cardarelli and Enzo Cocca
+
+          ### License
+          Apache License 2.0
+      
