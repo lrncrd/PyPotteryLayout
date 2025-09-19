@@ -1,0 +1,142 @@
+
+
+# WORKFLOW 1: build-executables.yml
+# ==================================
+# Crea questo file: .github/workflows/build-executables.yml
+
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 2.0.1)'
+        required: true
+        default: '2.0.0'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python-version: ['3.11']
+        include:
+          - os: windows-latest
+            artifact-name: PyPotteryLayout-Windows
+            executable-name: PyPotteryLayout.exe
+            build-command: pyinstaller --onefile --windowed --add-data "imgs;imgs" --name PyPotteryLayout gui_app.py
+          - os: macos-latest
+            artifact-name: PyPotteryLayout-macOS
+            executable-name: PyPotteryLayout.app
+            build-command: pyinstaller --onefile --windowed --add-data "imgs:imgs" --name PyPotteryLayout gui_app.py
+          - os: ubuntu-latest
+            artifact-name: PyPotteryLayout-Linux
+            executable-name: PyPotteryLayout
+            build-command: pyinstaller --onefile --windowed --add-data "imgs:imgs" --name PyPotteryLayout gui_app.py
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable
+      run: ${{ matrix.build-command }}
+
+    - name: Create distribution folder
+      run: |
+        mkdir -p dist-final
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          move dist\PyPotteryLayout.exe dist-final\
+        else
+          mv dist/PyPotteryLayout dist-final/
+          chmod +x dist-final/PyPotteryLayout
+        fi
+
+    - name: Create ZIP archive
+      run: |
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          Compress-Archive -Path dist-final\* -DestinationPath ${{ matrix.artifact-name }}.zip
+        else
+          cd dist-final && zip -r ../${{ matrix.artifact-name }}.zip * && cd ..
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact-name }}
+        path: ${{ matrix.artifact-name }}.zip
+
+# WORKFLOW 2: test-build.yml
+# ===========================
+# Crea questo file: .github/workflows/test-build.yml
+
+name: Test Build
+
+on:
+  push:
+    branches: [ main, feature/gui-improvements ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python-version: ['3.11']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Test PyInstaller build
+      run: |
+        pyinstaller --onefile --name PyPotteryLayout gui_app.py
+
+    - name: Check executable exists
+      run: |
+        if [ -f "dist/PyPotteryLayout*" ]; then
+          echo "✓ Executable built successfully"
+        else
+          echo "✗ Executable not found"
+          exit 1
+        fi
