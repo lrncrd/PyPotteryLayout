@@ -54,6 +54,7 @@ class LayoutApp(tk.Tk):
             'pixels_per_cm': tk.IntVar(value=118), # ~300DPI equivalent
             'show_margin_border': tk.BooleanVar(value=False),  # New feature for margin borders
             'export_format': tk.StringVar(value="PDF"),  # Export format selection
+            'images_per_page': tk.IntVar(value=0),  # 0 means automatic (fit as many as possible)
         }
 
         # Variable to show formatted scale value
@@ -287,7 +288,12 @@ class LayoutApp(tk.Tk):
         ttk.Label(page_frame, text="Image Spacing (px):").grid(row=2, column=0, sticky=W, padx=5, pady=2)
         ttk.Spinbox(page_frame, from_=0, to=200, textvariable=self.vars['spacing_px'], width=15).grid(row=2, column=1, sticky=W, padx=5, pady=2)
 
-        ttk.Checkbutton(page_frame, text="Show Margin Border", variable=self.vars['show_margin_border']).grid(row=3, column=0, columnspan=2, sticky=W, padx=5, pady=5)
+        ttk.Label(page_frame, text="Images per Page:").grid(row=3, column=0, sticky=W, padx=5, pady=2)
+        images_spinbox = ttk.Spinbox(page_frame, from_=0, to=50, textvariable=self.vars['images_per_page'], width=15)
+        images_spinbox.grid(row=3, column=1, sticky=W, padx=5, pady=2)
+        ttk.Label(page_frame, text="(0 = automatic)", font=("Arial", 9), foreground="gray").grid(row=3, column=2, sticky=W, padx=2, pady=2)
+
+        ttk.Checkbutton(page_frame, text="Show Margin Border", variable=self.vars['show_margin_border']).grid(row=4, column=0, columnspan=2, sticky=W, padx=5, pady=5)
 
         page_frame.columnconfigure(1, weight=1)
 
@@ -569,6 +575,28 @@ class LayoutApp(tk.Tk):
         preview_header.pack(fill=X, padx=10, pady=5)
 
         ttk.Label(preview_header, text="Layout Preview", font=("Arial", 12, "bold")).pack(side=LEFT)
+
+        # Page navigation controls
+        nav_frame = ttk.Frame(preview_header)
+        nav_frame.pack(side=RIGHT, padx=(10, 5))
+
+        self.current_page = tk.IntVar(value=1)
+        self.total_pages = tk.IntVar(value=1)
+
+        ttk.Button(nav_frame, text="◀", command=self._prev_page, width=3).pack(side=LEFT, padx=2)
+
+        page_label_frame = ttk.Frame(nav_frame)
+        page_label_frame.pack(side=LEFT, padx=5)
+        ttk.Label(page_label_frame, text="Page").pack(side=LEFT)
+        self.page_entry = ttk.Entry(page_label_frame, textvariable=self.current_page, width=3)
+        self.page_entry.pack(side=LEFT, padx=2)
+        self.page_entry.bind('<Return>', lambda e: self._update_preview())
+        ttk.Label(page_label_frame, text="of").pack(side=LEFT, padx=2)
+        self.total_pages_label = ttk.Label(page_label_frame, textvariable=self.total_pages)
+        self.total_pages_label.pack(side=LEFT)
+
+        ttk.Button(nav_frame, text="▶", command=self._next_page, width=3).pack(side=LEFT, padx=2)
+
         ttk.Button(preview_header, text="Refresh Preview", command=self._update_preview).pack(side=RIGHT, padx=5)
 
         # Create scrollable preview area
@@ -705,6 +733,21 @@ class LayoutApp(tk.Tk):
         self.preview_info.config(text=f"Loaded {len(self.preview_images)} of {len(image_files)} images for preview")
         self._update_preview()
 
+    def _prev_page(self):
+        """Navigate to previous page."""
+        current = self.current_page.get()
+        if current > 1:
+            self.current_page.set(current - 1)
+            self._update_preview()
+
+    def _next_page(self):
+        """Navigate to next page."""
+        current = self.current_page.get()
+        total = self.total_pages.get()
+        if current < total:
+            self.current_page.set(current + 1)
+            self._update_preview()
+
     def _update_preview(self):
         """Update the preview canvas with current layout settings."""
         if not self.preview_images:
@@ -735,6 +778,39 @@ class LayoutApp(tk.Tk):
                 outline="gray", dash=(5, 5)
             )
 
+        # Calculate pagination
+        images_per_page = self.vars['images_per_page'].get()
+        total_images = len(self.preview_images)
+
+        if images_per_page > 0:
+            # Calculate total pages needed
+            total_pages = (total_images + images_per_page - 1) // images_per_page
+            self.total_pages.set(total_pages)
+
+            # Ensure current page is valid
+            current_page = self.current_page.get()
+            if current_page < 1:
+                self.current_page.set(1)
+                current_page = 1
+            elif current_page > total_pages:
+                self.current_page.set(total_pages)
+                current_page = total_pages
+
+            # Calculate image range for current page
+            start_idx = (current_page - 1) * images_per_page
+            end_idx = min(start_idx + images_per_page, total_images)
+
+            # Create subset of images for this page
+            page_images = self.preview_images[start_idx:end_idx]
+        else:
+            # All images on one page
+            self.total_pages.set(1)
+            self.current_page.set(1)
+            page_images = self.preview_images
+
+        # Store the page images for use in layout methods
+        self.current_page_images = page_images
+
         # Layout images based on mode
         mode = self.vars['mode'].get()
         spacing = int(self.vars['spacing_px'].get() * preview_scale)
@@ -751,6 +827,17 @@ class LayoutApp(tk.Tk):
 
         # Update scroll region
         self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
+
+        # Update info label with page information
+        images_per_page = self.vars['images_per_page'].get()
+        if images_per_page > 0:
+            current = self.current_page.get()
+            total = self.total_pages.get()
+            start_idx = (current - 1) * images_per_page + 1
+            end_idx = min(current * images_per_page, len(self.preview_images))
+            self.preview_info.config(text=f"Page {current} of {total} - Showing images {start_idx}-{end_idx} of {len(self.preview_images)}")
+        else:
+            self.preview_info.config(text=f"Showing all {len(self.preview_images)} images on one page")
 
     def _preview_grid_layout(self, canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale):
         """Preview grid layout with image thumbnails."""
@@ -769,14 +856,14 @@ class LayoutApp(tk.Tk):
         img_idx = 0
         for row in range(rows):
             for col in range(cols):
-                if img_idx >= len(self.preview_images):
+                if img_idx >= len(self.current_page_images):
                     break
 
                 x = margin + col * (cell_width + spacing)
                 y = margin + row * (cell_height + spacing)
 
                 # Get the image
-                path, img = self.preview_images[img_idx]
+                path, img = self.current_page_images[img_idx]
 
                 try:
                     # Calculate image size to fit cell while maintaining aspect ratio
@@ -843,7 +930,7 @@ class LayoutApp(tk.Tk):
         y = margin
         row_height = 0
 
-        for idx, (path, img) in enumerate(self.preview_images):
+        for idx, (path, img) in enumerate(self.current_page_images):
             # Scale image size with enhanced scale
             img_width = int(img.width * enhanced_scale)
             img_height = int(img.height * enhanced_scale)
@@ -901,7 +988,7 @@ class LayoutApp(tk.Tk):
         # Track the current y position for each column
         col_heights = [margin] * cols
 
-        for idx, (path, img) in enumerate(self.preview_images):
+        for idx, (path, img) in enumerate(self.current_page_images):
             # Find the shortest column
             min_col = col_heights.index(min(col_heights))
 
@@ -968,7 +1055,7 @@ class LayoutApp(tk.Tk):
             max_row_height = 0
             items_in_row = 0
 
-            for idx, (path, img) in enumerate(self.preview_images):
+            for idx, (path, img) in enumerate(self.current_page_images):
                 img_width = int(img.width * enhanced_scale)
                 img_height = int(img.height * enhanced_scale)
 
@@ -985,7 +1072,7 @@ class LayoutApp(tk.Tk):
                 items_in_row += 1
 
         # Draw images at their manual positions
-        for idx, (path, img) in enumerate(self.preview_images):
+        for idx, (path, img) in enumerate(self.current_page_images):
             if idx in self.manual_positions:
                 x, y, w, h = self.manual_positions[idx]
 

@@ -302,17 +302,23 @@ def add_captions_to_images(image_data, metadata, font_size, caption_padding, sta
     return image_data
 
 
-def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, status_callback=print):
+def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, images_per_page=0, status_callback=print):
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
     available_width = page_width - (2 * margin_px)
     pages, image_index = [], 0
+
     while image_index < len(image_data):
         current_page = Image.new('RGB', page_size_px, 'white')
         current_y = margin_px
         page_has_images = False
         rows_on_this_page = 0
-        while image_index < len(image_data) and rows_on_this_page < rows_per_page:
+        images_on_this_page = 0
+
+        # Set limit for images on this page
+        page_image_limit = images_per_page if images_per_page > 0 else float('inf')
+
+        while image_index < len(image_data) and rows_on_this_page < rows_per_page and images_on_this_page < page_image_limit:
             row_images, current_row_width, row_height = [], 0, 0
             temp_index = image_index
             while temp_index < len(image_data) and len(row_images) < suggested_cols:
@@ -345,6 +351,7 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                 current_page.paste(img, (current_x, paste_y), img if img.mode == 'RGBA' else None)
                 current_x += img.width + spacing_px
                 page_has_images = True
+                images_on_this_page += 1
             current_y += row_height + spacing_px
             rows_on_this_page += 1
         if page_has_images:
@@ -355,17 +362,47 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
     return pages
 
 
-def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_callback=print):
+def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, images_per_page=0, status_callback=print):
     page_width, page_height = page_size_px
     bin_width, bin_height = page_width - (2 * margin_px), page_height - (2 * margin_px)
-    packer = rectpack.newPacker(rotation=False)
-    images = [d['img'] for d in image_data]
-    for i, img in enumerate(images):
-        packer.add_rect(img.width + spacing_px, img.height + spacing_px, rid=i)
-    for _ in range(len(images)):
-        packer.add_bin(bin_width, bin_height)
-    packer.pack()
     pages = []
+    images = [d['img'] for d in image_data]
+
+    if images_per_page > 0:
+        # Process images in chunks
+        for i in range(0, len(images), images_per_page):
+            chunk = images[i:i+images_per_page]
+            chunk_data = image_data[i:i+images_per_page]
+
+            packer = rectpack.newPacker(rotation=False)
+            for j, img in enumerate(chunk):
+                packer.add_rect(img.width + spacing_px, img.height + spacing_px, rid=j)
+
+            # Add bins for this chunk
+            for _ in range(len(chunk)):
+                packer.add_bin(bin_width, bin_height)
+            packer.pack()
+
+            # Create pages for this chunk
+            for bin_idx, abin in enumerate(packer):
+                if not abin:
+                    break
+                page = Image.new('RGB', page_size_px, 'white')
+                status_callback(f"Creating puzzle page...")
+                for rect in abin:
+                    original_image = chunk[rect.rid]
+                    paste_x, paste_y = margin_px + rect.x, margin_px + rect.y
+                    page.paste(original_image, (paste_x, paste_y), original_image if original_image.mode == 'RGBA' else None)
+                pages.append(page)
+                break  # Only use first bin when images_per_page is set
+    else:
+        # Original behavior - pack all images optimally
+        packer = rectpack.newPacker(rotation=False)
+        for i, img in enumerate(images):
+            packer.add_rect(img.width + spacing_px, img.height + spacing_px, rid=i)
+        for _ in range(len(images)):
+            packer.add_bin(bin_width, bin_height)
+        packer.pack()
     for i, abin in enumerate(packer):
         if not abin:
             break
@@ -414,7 +451,7 @@ def place_images_manual(image_data, page_size_px, margin_px, manual_positions, s
     return pages
 
 
-def place_images_masonry(image_data, page_size_px, margin_px, spacing_px, columns=3, status_callback=print):
+def place_images_masonry(image_data, page_size_px, margin_px, spacing_px, columns=3, images_per_page=0, status_callback=print):
     """Place images in masonry layout (Pinterest-style vertical columns)."""
     page_width, page_height = page_size_px
     available_width = page_width - (2 * margin_px)
@@ -1971,14 +2008,16 @@ def run_layout_process(params, status_callback=print):
             final_pages = []
             status_callback(f"Starting placement in '{params.get('mode', 'grid')}' mode...")
             
+            images_per_page = params.get('images_per_page', 0)
+
             if params.get('mode') == 'grid':
                 grid_size = (params.get('grid_rows', 1), params.get('grid_cols', 1))
-                final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
+                final_pages = place_images_grid(image_data, page_dims, grid_size, params.get('margin_px', 0), params.get('spacing_px', 0), images_per_page, status_callback)
             elif params.get('mode') == 'puzzle':
-                final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), status_callback)
+                final_pages = place_images_puzzle(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), images_per_page, status_callback)
             elif params.get('mode') == 'masonry':
                 columns = params.get('grid_cols', 3)  # Use grid_cols for masonry columns
-                final_pages = place_images_masonry(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, status_callback)
+                final_pages = place_images_masonry(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, images_per_page, status_callback)
             elif params.get('mode') == 'manual':
                 manual_positions = params.get('manual_positions', {})
                 final_pages = place_images_manual(image_data, page_dims, params.get('margin_px', 0), manual_positions, params.get('scale_factor', 1.0), status_callback)
