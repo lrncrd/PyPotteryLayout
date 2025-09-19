@@ -55,6 +55,12 @@ class LayoutApp(tk.Tk):
             'show_margin_border': tk.BooleanVar(value=False),  # New feature for margin borders
             'export_format': tk.StringVar(value="PDF"),  # Export format selection
             'images_per_page': tk.IntVar(value=0),  # 0 means automatic (fit as many as possible)
+            # Table numbering parameters
+            'add_table_number': tk.BooleanVar(value=False),
+            'table_number_start': tk.IntVar(value=1),
+            'table_number_position': tk.StringVar(value="bottom_center"),
+            'table_number_font_size': tk.IntVar(value=16),
+            'table_number_prefix': tk.StringVar(value="Tav.")
         }
 
         # Variable to show formatted scale value
@@ -682,6 +688,43 @@ class LayoutApp(tk.Tk):
         pixels_frame.pack(fill=X, pady=2)
         ttk.Label(pixels_frame, text="Pixels/cm:").pack(side=LEFT)
         ttk.Spinbox(pixels_frame, from_=10, to=500, textvariable=self.vars['pixels_per_cm'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        # Table numbering controls
+        table_separator = ttk.Separator(col3, orient='horizontal')
+        table_separator.pack(fill=X, pady=(10, 5))
+
+        table_label = ttk.Label(col3, text="Table Numbering:", font=("Arial", 10, "bold"))
+        table_label.pack(anchor=W, pady=(0, 5))
+
+        ttk.Checkbutton(col3, text="Add Table Number", variable=self.vars['add_table_number']).pack(anchor=W, pady=2)
+
+        # Start number
+        start_frame = ttk.Frame(col3)
+        start_frame.pack(fill=X, pady=2)
+        ttk.Label(start_frame, text="Start at:").pack(side=LEFT)
+        ttk.Spinbox(start_frame, from_=1, to=999, textvariable=self.vars['table_number_start'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        # Position
+        position_frame = ttk.Frame(col3)
+        position_frame.pack(fill=X, pady=2)
+        ttk.Label(position_frame, text="Position:").pack(side=LEFT)
+        position_combo = ttk.Combobox(position_frame, textvariable=self.vars['table_number_position'],
+                                     values=["top_left", "top_center", "top_right",
+                                            "bottom_left", "bottom_center", "bottom_right"],
+                                     state='readonly', width=15)
+        position_combo.pack(side=LEFT, padx=(5, 0))
+
+        # Font size
+        font_frame = ttk.Frame(col3)
+        font_frame.pack(fill=X, pady=2)
+        ttk.Label(font_frame, text="Font size:").pack(side=LEFT)
+        ttk.Spinbox(font_frame, from_=8, to=72, textvariable=self.vars['table_number_font_size'], width=10).pack(side=LEFT, padx=(5, 0))
+
+        # Prefix
+        prefix_frame = ttk.Frame(col3)
+        prefix_frame.pack(fill=X, pady=2)
+        ttk.Label(prefix_frame, text="Prefix:").pack(side=LEFT)
+        ttk.Entry(prefix_frame, textvariable=self.vars['table_number_prefix'], width=10).pack(side=LEFT, padx=(5, 0))
 
     def _setup_preview_bindings(self):
         """Bind variable changes to preview updates with debouncing."""

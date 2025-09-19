@@ -2185,13 +2185,28 @@ def run_layout_process(params, status_callback=print):
                     x_pos = params.get('margin_px', 0)
                     y_pos = page.height - params.get('margin_px', 0) - scale_bar.height
                     page.paste(scale_bar, (x_pos, y_pos), scale_bar)
-            
+
+            # Add table numbering if requested
+            if params.get('add_table_number') and final_pages:
+                status_callback("Adding table numbers to pages...")
+                for i, page in enumerate(final_pages):
+                    table_number = params.get('table_number_start', 1) + i
+                    final_pages[i] = add_table_number_to_page(
+                        page,
+                        table_number,
+                        params.get('table_number_position', 'bottom_center'),
+                        params.get('table_number_font_size', 16),
+                        params.get('margin_px', 50),
+                        params.get('table_number_prefix', 'Tav.'),
+                        status_callback
+                    )
+
             # Add margin borders if requested
             if params.get('show_margin_border') and final_pages:
                 status_callback("Adding margin borders to pages...")
                 for i, page in enumerate(final_pages):
                     final_pages[i] = draw_margin_border(page, params.get('margin_px', 0), status_callback)
-            
+
             # Save traditional output
             status_callback(f"Saving output to '{output_file}'...")
             save_output(final_pages, output_file, params.get('output_dpi', 300), status_callback)
