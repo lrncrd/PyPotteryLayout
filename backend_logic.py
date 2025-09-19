@@ -262,6 +262,81 @@ def create_scale_bar(target_cm, pixels_per_cm, scale_factor, status_callback=pri
     return bar_img
 
 
+def calculate_optimal_scale(image_data, page_size_px, margin_px, spacing_px, images_per_page, mode, grid_size=None):
+    """Calculate optimal scale factor to fill the page with the given number of images."""
+    if images_per_page <= 0 or not image_data:
+        return 1.0
+
+    page_width, page_height = page_size_px
+    available_width = page_width - (2 * margin_px)
+    available_height = page_height - (2 * margin_px)
+
+    # Get subset of images for this page
+    page_images = image_data[:min(images_per_page, len(image_data))]
+
+    # Calculate average image dimensions
+    avg_width = sum(d['img'].width for d in page_images) / len(page_images)
+    avg_height = sum(d['img'].height for d in page_images) / len(page_images)
+    avg_ratio = avg_width / avg_height
+
+    if mode == "grid" and grid_size:
+        rows, cols = grid_size
+        # Calculate how many images fit in the grid
+        grid_capacity = rows * cols
+        actual_images = min(images_per_page, grid_capacity, len(page_images))
+
+        # Calculate optimal size for grid cells
+        if actual_images <= cols:
+            # Single row
+            effective_cols = actual_images
+            effective_rows = 1
+        else:
+            # Multiple rows
+            effective_cols = cols
+            effective_rows = min(rows, (actual_images + cols - 1) // cols)
+
+        # Available space per cell
+        cell_width = (available_width - (effective_cols - 1) * spacing_px) / effective_cols
+        cell_height = (available_height - (effective_rows - 1) * spacing_px) / effective_rows
+
+        # Calculate scale to fit average image in cell
+        scale_width = cell_width / avg_width * 0.9  # 90% to leave some margin
+        scale_height = cell_height / avg_height * 0.9
+
+        optimal_scale = min(scale_width, scale_height)
+
+    elif mode == "puzzle":
+        # For puzzle mode, estimate based on total area
+        total_area = available_width * available_height
+
+        # Calculate total image area at current scale
+        current_total_area = sum(d['img'].width * d['img'].height for d in page_images)
+
+        # Add spacing area estimate (roughly 10% of image area)
+        spacing_area = current_total_area * 0.15
+
+        # Calculate scale factor to fill available area
+        area_ratio = (total_area * 0.85) / (current_total_area + spacing_area)
+        optimal_scale = area_ratio ** 0.5  # Square root for 2D scaling
+
+    elif mode == "masonry":
+        # For masonry, focus on column width
+        columns = 3  # Default masonry columns
+        col_width = (available_width - (columns - 1) * spacing_px) / columns
+
+        # Scale to fit column width
+        optimal_scale = col_width / avg_width * 0.95
+
+    else:
+        # Default or manual mode
+        optimal_scale = 1.0
+
+    # Limit scale factor to reasonable range
+    optimal_scale = max(0.1, min(optimal_scale, 5.0))
+
+    return optimal_scale
+
+
 def scale_images(image_data, scale_factor, status_callback=print):
     if scale_factor == 1.0:
         return image_data
@@ -403,24 +478,24 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, images_
         for _ in range(len(images)):
             packer.add_bin(bin_width, bin_height)
         packer.pack()
-    for i, abin in enumerate(packer):
-        if not abin:
-            break
-        page = Image.new('RGB', page_size_px, 'white')
-        status_callback(f"Creating puzzle page {i+1}...")
-        for rect in abin:
-            original_image = images[rect.rid]
-            paste_x, paste_y = margin_px + rect.x, margin_px + rect.y
-            page.paste(original_image, (paste_x, paste_y), original_image if original_image.mode == 'RGBA' else None)
-        pages.append(page)
+
+        for i, abin in enumerate(packer):
+            if not abin:
+                break
+            page = Image.new('RGB', page_size_px, 'white')
+            status_callback(f"Creating puzzle page {i+1}...")
+            for rect in abin:
+                original_image = images[rect.rid]
+                paste_x, paste_y = margin_px + rect.x, margin_px + rect.y
+                page.paste(original_image, (paste_x, paste_y), original_image if original_image.mode == 'RGBA' else None)
+            pages.append(page)
     return pages
 
 
-def place_images_manual(image_data, page_size_px, margin_px, manual_positions, scale_factor, status_callback=print):
-    """Place images based on manual drag-and-drop positions."""
+def place_images_manual(image_data, page_size_px, margin_px, manual_positions, scale_factor, status_callback=print, images_per_page=0):
+    """Place images based on manual drag-and-drop positions with multi-page support."""
     page_width, page_height = page_size_px
     pages = []
-    current_page = Image.new('RGB', page_size_px, 'white')
 
     status_callback("Creating manual layout from user-defined positions...")
 
@@ -428,26 +503,70 @@ def place_images_manual(image_data, page_size_px, margin_px, manual_positions, s
     preview_scale = 0.2  # This should match the preview scale in GUI
     actual_scale = 1.0 / preview_scale
 
-    for idx, data in enumerate(image_data):
-        if idx in manual_positions:
-            # Get position from manual layout
-            x, y, w, h = manual_positions[idx]
+    if images_per_page > 0:
+        # Multi-page support: group images by page
+        page_groups = {}
+        for idx, data in enumerate(image_data):
+            if idx in manual_positions:
+                # Calculate which page this image belongs to based on position
+                x, y, w, h = manual_positions[idx]
+                actual_y = int(y * actual_scale)
 
-            # Scale positions to actual page size
-            actual_x = int(x * actual_scale)
-            actual_y = int(y * actual_scale)
+                # Determine page number based on y position
+                page_num = actual_y // page_height
+                if page_num not in page_groups:
+                    page_groups[page_num] = []
+                page_groups[page_num].append(idx)
 
-            # Get the actual image
-            img = data['img']
+        # Create pages for each group
+        for page_num in sorted(page_groups.keys()):
+            current_page = Image.new('RGB', page_size_px, 'white')
+            status_callback(f"Creating manual layout page {page_num + 1}...")
 
-            # Paste image at manual position
-            try:
-                current_page.paste(img, (actual_x, actual_y), img if img.mode == 'RGBA' else None)
-                status_callback(f"Placed image {idx+1} at manual position ({actual_x}, {actual_y})")
-            except Exception as e:
-                status_callback(f"Warning: Could not place image {idx+1}: {e}")
+            for idx in page_groups[page_num]:
+                data = image_data[idx]
+                x, y, w, h = manual_positions[idx]
 
-    pages.append(current_page)
+                # Scale and adjust positions
+                actual_x = int(x * actual_scale)
+                actual_y = int(y * actual_scale) - (page_num * page_height)
+
+                # Get the actual image
+                img = data['img']
+
+                # Paste image at manual position
+                try:
+                    current_page.paste(img, (actual_x, actual_y), img if img.mode == 'RGBA' else None)
+                    status_callback(f"Placed image {idx+1} on page {page_num + 1}")
+                except Exception as e:
+                    status_callback(f"Warning: Could not place image {idx+1}: {e}")
+
+            pages.append(current_page)
+    else:
+        # Single page mode - original behavior
+        current_page = Image.new('RGB', page_size_px, 'white')
+
+        for idx, data in enumerate(image_data):
+            if idx in manual_positions:
+                # Get position from manual layout
+                x, y, w, h = manual_positions[idx]
+
+                # Scale positions to actual page size
+                actual_x = int(x * actual_scale)
+                actual_y = int(y * actual_scale)
+
+                # Get the actual image
+                img = data['img']
+
+                # Paste image at manual position
+                try:
+                    current_page.paste(img, (actual_x, actual_y), img if img.mode == 'RGBA' else None)
+                    status_callback(f"Placed image {idx+1} at manual position ({actual_x}, {actual_y})")
+                except Exception as e:
+                    status_callback(f"Warning: Could not place image {idx+1}: {e}")
+
+        pages.append(current_page)
+
     return pages
 
 
@@ -1958,8 +2077,38 @@ def run_layout_process(params, status_callback=print):
         primary_sort = params.get('sort_by', 'alphabetical')
         secondary_sort = params.get('sort_by_secondary', 'none')
         image_data = sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback)
-        image_data = scale_images(image_data, params.get('scale_factor', 1.0), status_callback)
-        
+
+        # Calculate optimal scale factor if images_per_page is set
+        images_per_page = params.get('images_per_page', 0)
+        scale_factor = params.get('scale_factor', 1.0)
+
+        if images_per_page > 0:
+            page_dims = get_page_dimensions_px(params.get('page_size', 'A4'), params.get('custom_size'))
+            grid_size = (params.get('grid_rows', 1), params.get('grid_cols', 1)) if params.get('mode') == 'grid' else None
+
+            # Calculate optimal scale to fill the page
+            optimal_scale = calculate_optimal_scale(
+                image_data,
+                page_dims,
+                params.get('margin_px', 0),
+                params.get('spacing_px', 0),
+                images_per_page,
+                params.get('mode', 'grid'),
+                grid_size
+            )
+
+            # Apply the optimal scale (multiply with user's scale factor)
+            final_scale = scale_factor * optimal_scale
+            status_callback(f"Auto-scaling: Using scale factor {final_scale:.2f}x to optimize page layout")
+            image_data = scale_images(image_data, final_scale, status_callback)
+
+            # Update scale factor for scale bar
+            params['actual_scale_factor'] = final_scale
+        else:
+            # Use manual scale factor
+            image_data = scale_images(image_data, scale_factor, status_callback)
+            params['actual_scale_factor'] = scale_factor
+
         # Add captions to image data if requested (needed for positioning)
         if params.get('add_caption'):
             image_data = add_captions_to_images(
@@ -2020,16 +2169,18 @@ def run_layout_process(params, status_callback=print):
                 final_pages = place_images_masonry(image_data, page_dims, params.get('margin_px', 0), params.get('spacing_px', 0), columns, images_per_page, status_callback)
             elif params.get('mode') == 'manual':
                 manual_positions = params.get('manual_positions', {})
-                final_pages = place_images_manual(image_data, page_dims, params.get('margin_px', 0), manual_positions, params.get('scale_factor', 1.0), status_callback)
+                final_pages = place_images_manual(image_data, page_dims, params.get('margin_px', 0), manual_positions, params.get('scale_factor', 1.0), status_callback, images_per_page)
 
             status_callback(f"Generated {len(final_pages)} pages.")
             
             # Add scale bar to traditional layout
             if params.get('add_scale_bar') and final_pages:
+                # Use the actual scale factor that was applied to images
+                actual_scale = params.get('actual_scale_factor', params.get('scale_factor', 1.0))
                 if params.get('pixels_per_cm') and params.get('scale_bar_cm'):
-                    scale_bar = create_scale_bar(params.get('scale_bar_cm', 5), params.get('pixels_per_cm', 100), params.get('scale_factor', 1.0), status_callback)
+                    scale_bar = create_scale_bar(params.get('scale_bar_cm', 5), params.get('pixels_per_cm', 100), actual_scale, status_callback)
                 else:
-                    scale_bar = create_scale_bar(params.get('scale_bar_length_px', 100), 1.0, params.get('scale_factor', 1.0), status_callback)
+                    scale_bar = create_scale_bar(params.get('scale_bar_length_px', 100), 1.0, actual_scale, status_callback)
                 for page in final_pages:
                     x_pos = params.get('margin_px', 0)
                     y_pos = page.height - params.get('margin_px', 0) - scale_bar.height

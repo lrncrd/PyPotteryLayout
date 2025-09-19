@@ -816,14 +816,48 @@ class LayoutApp(tk.Tk):
         spacing = int(self.vars['spacing_px'].get() * preview_scale)
         scale_factor = self.vars['scale_factor'].get()
 
+        # Calculate automatic scaling if images_per_page is set
+        if images_per_page > 0 and page_images:
+            # Create image data structure similar to backend
+            image_data = []
+            for path, img in page_images:
+                image_data.append({'img': img, 'name': os.path.basename(path)})
+
+            # Get actual page dimensions (not preview scale)
+            actual_page_dims = (page_width, page_height)
+            actual_margin = self.vars['margin_px'].get()
+            actual_spacing = self.vars['spacing_px'].get()
+            grid_size = (self.vars['grid_rows'].get(), self.vars['grid_cols'].get()) if mode == 'grid' else None
+
+            # Calculate optimal scale using backend function
+            optimal_scale = backend_logic.calculate_optimal_scale(
+                image_data,
+                actual_page_dims,
+                actual_margin,
+                actual_spacing,
+                len(page_images),  # Use actual number of images on this page
+                mode,
+                grid_size
+            )
+
+            # Apply the optimal scale combined with user's scale factor
+            final_scale = scale_factor * optimal_scale
+            self.actual_scale_factor = final_scale
+
+            # Update status to show auto-scaling
+            self.preview_info.config(text=f"Auto-scale: {final_scale:.2f}x - Page {self.current_page.get()} of {self.total_pages.get()}")
+        else:
+            final_scale = scale_factor
+            self.actual_scale_factor = scale_factor
+
         if mode == "grid":
-            self._preview_grid_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
+            self._preview_grid_layout(canvas_width, canvas_height, margin, spacing, final_scale, preview_scale)
         elif mode == "puzzle":
-            self._preview_puzzle_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
+            self._preview_puzzle_layout(canvas_width, canvas_height, margin, spacing, final_scale, preview_scale)
         elif mode == "masonry":
-            self._preview_masonry_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
+            self._preview_masonry_layout(canvas_width, canvas_height, margin, spacing, final_scale, preview_scale)
         elif mode == "manual":
-            self._preview_manual_layout(canvas_width, canvas_height, margin, spacing, scale_factor, preview_scale)
+            self._preview_manual_layout(canvas_width, canvas_height, margin, spacing, final_scale, preview_scale)
 
         # Update scroll region
         self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
