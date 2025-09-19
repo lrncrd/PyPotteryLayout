@@ -1,4 +1,4 @@
-# PyPotteryLayout
+# PyPotteryLayout v2.0
 
 <div align="center">
 
