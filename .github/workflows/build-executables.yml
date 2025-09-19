@@ -1,0 +1,90 @@
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python-version: ['3.11']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable Windows
+      if: runner.os == 'Windows'
+      run: |
+        pyinstaller --onefile --windowed --add-data "imgs;imgs" --name PyPotteryLayout gui_app.py
+
+    - name: Build executable Unix
+      if: runner.os != 'Windows'
+      run: |
+        pyinstaller --onefile --windowed --add-data "imgs:imgs" --name PyPotteryLayout gui_app.py
+
+    - name: Create artifact Windows
+      if: runner.os == 'Windows'
+      run: |
+        mkdir dist-final
+        copy dist\PyPotteryLayout.exe dist-final\
+        Compress-Archive -Path dist-final\* -DestinationPath PyPotteryLayout-Windows.zip
+
+    - name: Create artifact macOS
+      if: runner.os == 'macOS'
+      run: |
+        mkdir dist-final
+        cp dist/PyPotteryLayout dist-final/
+        chmod +x dist-final/PyPotteryLayout
+        zip -r PyPotteryLayout-macOS.zip dist-final
+
+    - name: Create artifact Linux
+      if: runner.os == 'Linux'
+      run: |
+        mkdir dist-final
+        cp dist/PyPotteryLayout dist-final/
+        chmod +x dist-final/PyPotteryLayout
+        zip -r PyPotteryLayout-Linux.zip dist-final
+
+    - name: Upload Windows artifact
+      if: runner.os == 'Windows'
+      uses: actions/upload-artifact@v3
+      with:
+        name: PyPotteryLayout-Windows
+        path: PyPotteryLayout-Windows.zip
+
+    - name: Upload macOS artifact
+      if: runner.os == 'macOS'
+      uses: actions/upload-artifact@v3
+      with:
+        name: PyPotteryLayout-macOS
+        path: PyPotteryLayout-macOS.zip
+
+    - name: Upload Linux artifact
+      if: runner.os == 'Linux'
+      uses: actions/upload-artifact@v3
+      with:
+        name: PyPotteryLayout-Linux
+        path: PyPotteryLayout-Linux.zip
