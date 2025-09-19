@@ -5,11 +5,6 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version number (e.g., 2.0.1)'
-        required: true
-        default: '2.0.0'
 
 jobs:
   build:
@@ -17,19 +12,6 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
         python-version: ['3.11']
-        include:
-          - os: windows-latest
-            artifact-name: PyPotteryLayout-Windows
-            executable-name: PyPotteryLayout.exe
-            build-command: pyinstaller --onefile --windowed --icon=imgs/icon_app.ico --add-data "imgs;imgs" --name PyPotteryLayout gui_app.py
-          - os: macos-latest
-            artifact-name: PyPotteryLayout-macOS
-            executable-name: PyPotteryLayout.app
-            build-command: pyinstaller --onefile --windowed --icon=imgs/icon_app.icns --add-data "imgs:imgs" --name PyPotteryLayout gui_app.py
-          - os: ubuntu-latest
-            artifact-name: PyPotteryLayout-Linux
-            executable-name: PyPotteryLayout
-            build-command: pyinstaller --onefile --windowed --add-data "imgs:imgs" --name PyPotteryLayout gui_app.py
 
     runs-on: ${{ matrix.os }}
 
@@ -53,151 +35,56 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Create icon files (if missing)
-      run: |
-        python -c "
-import os
-os.makedirs('imgs', exist_ok=True)
-# Create placeholder icons if they don't exist
-if not os.path.exists('imgs/icon_app.ico'):
-    with open('imgs/icon_app.ico', 'wb') as f:
-        f.write(b'')  # Placeholder
-if not os.path.exists('imgs/icon_app.icns'):
-    with open('imgs/icon_app.icns', 'wb') as f:
-        f.write(b'')  # Placeholder
-        "
-
-    - name: Build executable
-      run: ${{ matrix.build-command }}
-
-    - name: Create distribution folder
-      run: |
-        mkdir -p dist-final
-
-    - name: Move executable to distribution folder (Windows)
+    - name: Build executable Windows
       if: runner.os == 'Windows'
       run: |
-        move dist\PyPotteryLayout.exe dist-final\
+        pyinstaller --onefile --windowed --add-data "imgs;imgs" --name PyPotteryLayout gui_app.py
 
-    - name: Move executable to distribution folder (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        mv dist/PyPotteryLayout dist-final/PyPotteryLayout
-        # Create .app bundle if needed
-        if [ -d "dist/PyPotteryLayout.app" ]; then
-          mv dist/PyPotteryLayout.app dist-final/
-        fi
-
-    - name: Move executable to distribution folder (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        mv dist/PyPotteryLayout dist-final/
-        chmod +x dist-final/PyPotteryLayout
-
-    - name: Add README to distribution
-      run: |
-        echo "PyPotteryLayout v2.0" > dist-final/README.txt
-        echo "" >> dist-final/README.txt
-        echo "Authors: Lorenzo Cardarelli and Enzo Cocca" >> dist-final/README.txt
-        echo "License: Apache 2.0" >> dist-final/README.txt
-        echo "" >> dist-final/README.txt
-        echo "To run the application:" >> dist-final/README.txt
-        if [ "${{ runner.os }}" == "Windows" ]; then
-          echo "Double-click PyPotteryLayout.exe" >> dist-final/README.txt
-        elif [ "${{ runner.os }}" == "macOS" ]; then
-          echo "Double-click PyPotteryLayout.app or run ./PyPotteryLayout" >> dist-final/README.txt
-        else
-          echo "Run ./PyPotteryLayout" >> dist-final/README.txt
-        fi
-
-    - name: Create ZIP archive (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        Compress-Archive -Path dist-final\* -DestinationPath ${{ matrix.artifact-name }}.zip
-
-    - name: Create ZIP archive (Unix)
+    - name: Build executable Unix
       if: runner.os != 'Windows'
       run: |
-        cd dist-final
-        zip -r ../${{ matrix.artifact-name }}.zip *
-        cd ..
+        pyinstaller --onefile --windowed --add-data "imgs:imgs" --name PyPotteryLayout gui_app.py
 
-    - name: Upload artifact
+    - name: Create artifact Windows
+      if: runner.os == 'Windows'
+      run: |
+        mkdir dist-final
+        copy dist\PyPotteryLayout.exe dist-final\
+        Compress-Archive -Path dist-final\* -DestinationPath PyPotteryLayout-Windows.zip
+
+    - name: Create artifact macOS
+      if: runner.os == 'macOS'
+      run: |
+        mkdir dist-final
+        cp dist/PyPotteryLayout dist-final/
+        chmod +x dist-final/PyPotteryLayout
+        zip -r PyPotteryLayout-macOS.zip dist-final
+
+    - name: Create artifact Linux
+      if: runner.os == 'Linux'
+      run: |
+        mkdir dist-final
+        cp dist/PyPotteryLayout dist-final/
+        chmod +x dist-final/PyPotteryLayout
+        zip -r PyPotteryLayout-Linux.zip dist-final
+
+    - name: Upload Windows artifact
+      if: runner.os == 'Windows'
       uses: actions/upload-artifact@v3
       with:
-        name: ${{ matrix.artifact-name }}
-        path: ${{ matrix.artifact-name }}.zip
+        name: PyPotteryLayout-Windows
+        path: PyPotteryLayout-Windows.zip
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v3
-
-    - name: Display structure of downloaded files
-      run: ls -la
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload macOS artifact
+      if: runner.os == 'macOS'
+      uses: actions/upload-artifact@v3
       with:
-        tag_name: ${{ github.ref_name }}
-        release_name: PyPotteryLayout ${{ github.ref_name }}
-        body: |
-          ## PyPotteryLayout ${{ github.ref_name }}
+        name: PyPotteryLayout-macOS
+        path: PyPotteryLayout-macOS.zip
 
-          ### What's New
-          - Automatic image scaling based on images per page
-          - Multi-page support for all layout modes
-          - Enhanced preview with real-time updates
-          - Improved manual layout with drag-and-drop
-
-          ### Downloads
-          - **Windows**: PyPotteryLayout-Windows.zip
-          - **macOS**: PyPotteryLayout-macOS.zip
-          - **Linux**: PyPotteryLayout-Linux.zip
-
-          ### Authors
-          Lorenzo Cardarelli and Enzo Cocca
-
-          ### License
-          Apache License 2.0
-        draft: false
-        prerelease: false
-
-    - name: Upload Windows Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload Linux artifact
+      if: runner.os == 'Linux'
+      uses: actions/upload-artifact@v3
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./PyPotteryLayout-Windows/PyPotteryLayout-Windows.zip
-        asset_name: PyPotteryLayout-Windows.zip
-        asset_content_type: application/zip
-
-    - name: Upload macOS Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./PyPotteryLayout-macOS/PyPotteryLayout-macOS.zip
-        asset_name: PyPotteryLayout-macOS.zip
-        asset_content_type: application/zip
-
-    - name: Upload Linux Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./PyPotteryLayout-Linux/PyPotteryLayout-Linux.zip
-        asset_name: PyPotteryLayout-Linux.zip
-        asset_content_type: application/zip
+        name: PyPotteryLayout-Linux
+        path: PyPotteryLayout-Linux.zip
