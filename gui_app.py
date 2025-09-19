@@ -7,7 +7,9 @@ from PIL import Image, ImageTk
 import threading
 import os
 
-VERSION = "0.1.0"
+VERSION = "2.0"
+AUTHORS = "Lorenzo Cardarelli & Enzo Cocca"
+YEAR = "2025"
 
 # Make sure backend_logic.py is in the same folder
 import backend_logic
@@ -91,6 +93,9 @@ class LayoutApp(tk.Tk):
         # Main vertical container
         main_vertical_container = ttk.Frame(self)
         main_vertical_container.pack(fill="both", expand=True)
+
+        # Create global header with logo and info button
+        self._create_global_header(main_vertical_container)
 
         # Top container with horizontal paned window
         top_container = ttk.PanedWindow(main_vertical_container, orient=tk.HORIZONTAL)
@@ -521,6 +526,138 @@ class LayoutApp(tk.Tk):
         # Initial message
         self._update_log("[SYSTEM] PyPotteryLayout Terminal Ready", "header")
         self._update_log("[INFO] Waiting for user input...", "info")
+
+    def _create_global_header(self, parent):
+        """Create global application header with icon, title, and info button"""
+        header_frame = ttk.Frame(parent)
+        header_frame.pack(fill=X, padx=5, pady=5)
+
+        # Create icon section (left)
+        icon_frame = ttk.Frame(header_frame)
+        icon_frame.pack(side=LEFT, padx=10, pady=5)
+
+        # Load and display icon
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "imgs", "icon_app.png")
+            if os.path.exists(icon_path):
+                icon_image = Image.open(icon_path)
+                icon_image = icon_image.resize((40, 40), Image.Resampling.LANCZOS)
+                self.global_icon_photo = ImageTk.PhotoImage(icon_image)
+                icon_label = ttk.Label(icon_frame, image=self.global_icon_photo)
+                icon_label.pack()
+            else:
+                icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 28))
+                icon_label.pack()
+        except Exception:
+            icon_label = ttk.Label(icon_frame, text="🏺", font=("Arial", 28))
+            icon_label.pack()
+
+        # Create title section (center-left)
+        title_frame = ttk.Frame(header_frame)
+        title_frame.pack(side=LEFT, padx=20, pady=5, fill=X, expand=True)
+
+        title_label = ttk.Label(title_frame, text="PyPotteryLayout",
+                               font=("Arial", 16, "bold"))
+        title_label.pack(anchor=W)
+
+        subtitle_label = ttk.Label(title_frame, text=f"Create artefacts table effortlessly - v{VERSION}",
+                                  font=("Arial", 11), foreground="gray")
+        subtitle_label.pack(anchor=W)
+
+        # Create info button section (right)
+        info_frame = ttk.Frame(header_frame)
+        info_frame.pack(side=RIGHT, padx=10, pady=5)
+
+        info_button = ttk.Button(info_frame, text="ℹ️ Info", command=self._show_info_dialog)
+        info_button.pack()
+
+    def _show_info_dialog(self):
+        """Show information dialog with app details"""
+        # Create a new window
+        info_window = tk.Toplevel(self)
+        info_window.title("About PyPotteryLayout")
+        info_window.geometry("550x500")
+        info_window.resizable(False, False)
+
+        # Center the window
+        info_window.transient(self)
+        info_window.grab_set()
+
+        # Main frame with padding
+        main_frame = ttk.Frame(info_window, padding="20")
+        main_frame.pack(fill="both", expand=True)
+
+        # Logo section
+        logo_frame = ttk.Frame(main_frame)
+        logo_frame.pack(pady=(0, 20))
+
+        try:
+            # Try to load the logo
+            logo_path = os.path.join(os.path.dirname(__file__), "imgs", "LogoLayout.png")
+            if os.path.exists(logo_path):
+                logo_image = Image.open(logo_path)
+                # Resize logo maintaining aspect ratio
+                max_size = 150
+                original_width, original_height = logo_image.size
+                ratio = min(max_size / original_width, max_size / original_height)
+                new_width = int(original_width * ratio)
+                new_height = int(original_height * ratio)
+                logo_image = logo_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                self.info_logo_photo = ImageTk.PhotoImage(logo_image)
+                logo_label = ttk.Label(logo_frame, image=self.info_logo_photo)
+                logo_label.pack()
+            else:
+                # Fallback to large emoji
+                logo_label = ttk.Label(logo_frame, text="🏺", font=("Arial", 72))
+                logo_label.pack()
+        except Exception:
+            # Fallback to large emoji
+            logo_label = ttk.Label(logo_frame, text="🏺", font=("Arial", 72))
+            logo_label.pack()
+
+        # Title
+        title_label = ttk.Label(main_frame, text="PyPotteryLayout",
+                               font=("Arial", 24, "bold"))
+        title_label.pack(pady=(0, 10))
+
+        # Version
+        version_label = ttk.Label(main_frame, text=f"Version {VERSION}",
+                                font=("Arial", 12))
+        version_label.pack()
+
+        # Authors
+        authors_label = ttk.Label(main_frame, text=f"© {YEAR} {AUTHORS}",
+                                font=("Arial", 11))
+        authors_label.pack(pady=(5, 20))
+
+        # Description
+        description_frame = ttk.Frame(main_frame)
+        description_frame.pack(fill="both", expand=True, pady=(0, 20))
+
+        description_text = tk.Text(description_frame, wrap="word", height=8, width=60,
+                                  font=("Arial", 10), relief="flat", bg="#f0f0f0")
+        description_text.pack(fill="both", expand=True)
+
+        description = """PyPotteryLayout is a powerful tool for creating publication-quality catalogues of archaeological artifacts.
+
+It provides automatic layout generation with grid-based and optimized puzzle layouts, multi-format export (SVG, PDF, JPG), metadata integration from Excel/CSV files, customizable scale bars, and professional caption systems.
+
+Designed to streamline the workflow for archaeologists and researchers, it combines automation with professional publishing standards to produce clean, publication-ready figures."""
+
+        description_text.insert("1.0", description)
+        description_text.configure(state="disabled")  # Make read-only
+
+        # Links section
+        links_frame = ttk.Frame(main_frame)
+        links_frame.pack(pady=(0, 10))
+
+        github_label = ttk.Label(links_frame, text="GitHub: github.com/lrncrd/PyPotteryLayout",
+                                font=("Arial", 10), foreground="blue", cursor="hand2")
+        github_label.pack()
+
+        # Close button
+        close_button = ttk.Button(main_frame, text="Close", command=info_window.destroy)
+        close_button.pack()
 
     def _update_log(self, message, tag="info"):
         """Update terminal-style log with colored output."""
