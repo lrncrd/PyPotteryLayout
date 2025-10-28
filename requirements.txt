@@ -2,6 +2,10 @@ Pillow>=9.0.0
 openpyxl>=3.0.0
 rectpack>=0.1.0
 
+# Flask web framework
+Flask>=2.3.0
+Werkzeug>=2.3.0
+
 # Optional dependencies for enhanced functionality
 reportlab>=3.6.0
 cairosvg>=2.5.0

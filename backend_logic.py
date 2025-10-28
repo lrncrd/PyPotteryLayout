@@ -273,17 +273,38 @@ def scale_images(image_data, scale_factor, status_callback=print):
     return image_data
 
 
-def add_captions_to_images(image_data, metadata, font_size, caption_padding, status_callback=print):
+def add_captions_to_images(image_data, metadata, font_size, caption_padding, remove_extension=False, selected_fields=None, hide_field_names=False, status_callback=print):
     status_callback("Adding captions to images...")
     font = get_font(font_size)
     for data in image_data:
         img = data['img']
-        caption_lines = [data['name']]
+        
+        # Get filename (with or without extension)
+        filename = data['name']
+        if remove_extension:
+            filename = os.path.splitext(filename)[0]
+        
+        caption_lines = [filename]
+        
+        # Add metadata if available
         img_metadata = metadata.get(data['name']) if metadata else None
-        if img_metadata:
+        if img_metadata and selected_fields:
+            for key, value in img_metadata.items():
+                # Only include selected fields
+                if key in selected_fields and value is not None:
+                    if hide_field_names:
+                        caption_lines.append(str(value))
+                    else:
+                        caption_lines.append(f"{key}: {value}")
+        elif img_metadata and not selected_fields:
+            # If no fields selected, include all (backward compatibility)
             for key, value in img_metadata.items():
                 if value is not None:
-                    caption_lines.append(f"{key}: {value}")
+                    if hide_field_names:
+                        caption_lines.append(str(value))
+                    else:
+                        caption_lines.append(f"{key}: {value}")
+        
         full_caption_text = "\n".join(caption_lines)
         temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
         text_bbox = temp_draw.multiline_textbbox((0, 0), full_caption_text, font=font)
