@@ -16,10 +16,23 @@ import base64
 import zipfile
 import backend_logic
 
+# Determine if running as executable or script
+def get_base_path():
+    """Get base path for data files (works for both exe and script)"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        # Use the directory where the executable is located
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        return os.path.dirname(os.path.abspath(__file__))
+
+BASE_PATH = get_base_path()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['OUTPUT_FOLDER'] = 'outputs'
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_PATH, 'uploads')
+app.config['OUTPUT_FOLDER'] = os.path.join(BASE_PATH, 'outputs')
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp'}
 app.config['ALLOWED_METADATA'] = {'xlsx', 'csv'}

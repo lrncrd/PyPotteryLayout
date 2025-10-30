@@ -4,7 +4,7 @@
 
 <img src="imgs/LogoLayout.png" width="500"/>
 
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE) 
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/lrncrd/PyPotteryLayout)
 
@@ -40,7 +40,7 @@ This efficiency makes the tool particularly valuable for projects with large ass
 
 ## 🚀 Quick Start
 
-### Download & Run (Windows)
+### Download & Run (Windows) - Web Version
 
 <div align="center">
 
@@ -49,11 +49,16 @@ This efficiency makes the tool particularly valuable for projects with large ass
 </div>
 
 1. Download `PyPotteryLayout.exe` from [Releases](../../releases)
-2. Run directly - no installation required
-3. Select image folder and configure layout
-4. Export as SVG or PDF
+2. Double-click to run - **no installation required**
+3. Your default browser will open automatically
+4. Upload images, configure layout, and export
+5. Close the browser when finished
 
-### From Source
+> **Note**: The executable runs a local web server. All processing happens on your computer - no internet connection required after download.
+
+### Run from Source (All Platforms)
+
+#### Web Interface (Flask)
 ```bash
 # Clone repository
 git clone https://github.com/lrncrd/PyPotteryLayout.git
@@ -62,20 +67,56 @@ cd PyPotteryLayout
 # Install dependencies
 pip install -r requirements.txt
 
-# Run application
+# Option 1: Run with launcher (recommended)
+python flask_launcher.py
+
+# Option 2: Run Flask directly
+python app.py
+# Then open http://127.0.0.1:5000 in your browser
+```
+
+#### Desktop GUI (Alternative)
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run desktop application
 python gui_app.py
 ```
 
 ## 📋 System Requirements
 
-- **Python**: 3.11+ (if running from source)
-- **Operating System**: Windows 10+ (executable), Windows/macOS/Linux (source)
+### Standalone Executable (Windows)
+- **Operating System**: Windows 10/11
+- **Memory**: 2GB+ RAM recommended
+- **Browser**: Any modern browser (Chrome, Edge, Firefox)
+- **No Python installation required!**
+
+### Running from Source
+- **Python**: 3.11+ 
+- **Operating System**: Windows/macOS/Linux
 - **Memory**: 2GB+ RAM recommended for large image sets
-- **Dependencies**: PIL/Pillow, tkinter, openpyxl
+- **Dependencies**: See `requirements.txt`
+  - Flask (web version)
+  - PIL/Pillow (image processing)
+  - openpyxl (Excel support)
+  - rectpack (puzzle layout algorithm)
 
 ## 🎯 Usage Guide
 
-### Basic Workflow
+### Basic Workflow (Web Interface)
+1. **Upload Images**: Drag & drop or select pottery images
+2. **Configure Layout**: Choose grid or puzzle layout with dimensions
+3. **Add Metadata** (Optional): Upload Excel/CSV file with captions and sorting
+4. **Customize Settings**: 
+   - Scale and margins
+   - Caption formatting
+   - Scale bars
+   - Image sorting
+5. **Preview**: Check the layout before exporting
+6. **Export**: Download as SVG, PDF, or ZIP with all files
+
+### Basic Workflow (Desktop GUI)
 1. **Select Images**: Choose folder containing pottery images
 2. **Configure Layout**: Set grid dimensions or use puzzle optimization
 3. **Add Metadata**: Optional Excel file with captions and sorting data
@@ -97,15 +138,57 @@ IMG002.jpg  | Site B   | Medieval| Bowl fragment
 
 ## 🔧 Advanced Features
 
+### Building Executable from Source
+
+Want to create your own standalone executable?
+
+```bash
+# Install PyInstaller
+pip install pyinstaller
+
+# Build the executable
+python build_exe.py
+
+# Find your exe in dist/ folder
+# dist/PyPotteryLayout.exe
+```
+
+The build script automatically:
+
+- Includes all templates and static files
+- Bundles Flask and dependencies
+- Adds custom icon
+- Creates no-console launcher
+
 ### SVG Editing Workflow
 1. Export as SVG format
-2. Open in Inkscape (free, recommended) or Illustrator
+2. Open in Inkscape (free, recommended)
 3. Edit text, move objects, adjust colors
 4. Keep `images/` folder next to SVG file
 5. All elements remain fully editable
 
+### Output Files Location
+
+**Standalone Executable**: Files are saved next to the *.exe*:
+
+- `uploads/` - Temporary uploaded images
+- `outputs/` - Generated layouts and exports
+- `pypotterylayout.log` - Application logs (for debugging)
+
+**From Source**: Files are saved in the project directory
+
 
 ## 📊 Recent Updates
+
+### v0.2.0 (Flask Web Version)
+
+- **New Web Interface**: Modern browser-based UI
+- **Standalone Executable**: Windows .exe with no dependencies
+- **Drag & Drop Upload**: Easy image management
+- **Live Preview**: See layout before exporting
+- **Download Manager**: Get results as ZIP or individual files
+- **Improved Paths**: Files saved next to executable for easy access
+- **Custom Icon**: Professional app branding
 
 ### v0.1.1
 
@@ -119,9 +202,6 @@ IMG002.jpg  | Site B   | Medieval| Bowl fragment
 - First public release with core features
 
 ## 🎯 Future Plans
-
-* [ ] Add usage examples
-* [ ] We're looking for your suggestions!
 
 If you have suggestions or need help, please open an issue on GitHub!
 
