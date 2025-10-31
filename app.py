@@ -806,7 +806,7 @@ if __name__ == '__main__':
     # Determine if running as compiled exe
     if getattr(sys, 'frozen', False):
         # Running as compiled exe
-        PORT = 5000
+        PORT = 5001
         URL = f'http://localhost:{PORT}'
         
         # Open browser after 1.5 seconds
@@ -818,4 +818,4 @@ if __name__ == '__main__':
         app.run(host='127.0.0.1', port=PORT, debug=False)
     else:
         # Running as script in development
-        app.run(debug=True, host='0.0.0.0', port=5000)
+        app.run(debug=True, host='0.0.0.0', port=5001)

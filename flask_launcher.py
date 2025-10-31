@@ -21,7 +21,7 @@ if getattr(sys, 'frozen', False):
 
 from app import app
 
-def open_browser(port=5000, delay=1.5):
+def open_browser(port=5001, delay=1.5):
     """Open the default web browser after a delay"""
     def _open():
         time.sleep(delay)
@@ -46,7 +46,7 @@ def show_error(message):
 
 def main():
     """Main entry point for the executable"""
-    PORT = 5000
+    PORT = 5001
     
     if getattr(sys, 'frozen', False):
         # Running as executable

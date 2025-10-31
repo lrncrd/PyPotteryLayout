@@ -72,7 +72,7 @@ python flask_launcher.py
 
 # Option 2: Run Flask directly
 python app.py
-# Then open http://127.0.0.1:5000 in your browser
+# Then open http://127.0.0.1:5001 in your browser
 ```
 
 #### Desktop GUI (Alternative)
@@ -134,7 +134,7 @@ Filename    | Site     | Period  | Description
 IMG001.jpg  | Site A   | Roman   | Storage jar
 IMG002.jpg  | Site B   | Medieval| Bowl fragment
 ```
-
+NB: Filenames must match exactly (case-sensitive), **including extensions**.
 
 ## 🔧 Advanced Features
 

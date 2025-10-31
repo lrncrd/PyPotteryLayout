@@ -160,10 +160,10 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
     Sorts images with hierarchical two-level sorting.
     
     Args:
-        image_data: Lista di dati immagine
-        primary_sort: Campo di ordinamento primario
-        secondary_sort: Campo di ordinamento secondario (può essere 'none', 'random', 'alphabetical', 'natural_name', o un campo metadati)
-        metadata: Dizionario metadati
+        image_data: List of image data dictionaries
+        primary_sort: Primary sort field
+        secondary_sort: Secondary sort field (can be 'none', 'random', 'alphabetical', 'natural_name', or a metadata field)
+        metadata: Metadata dictionary
         status_callback: Function for status messages
     """
     if not image_data:
