@@ -803,10 +803,11 @@ if __name__ == '__main__':
     import webbrowser
     from threading import Timer
     
+    PORT = 5005
+    
     # Determine if running as compiled exe
     if getattr(sys, 'frozen', False):
         # Running as compiled exe
-        PORT = 5001
         URL = f'http://localhost:{PORT}'
         
         # Open browser after 1.5 seconds
@@ -818,4 +819,11 @@ if __name__ == '__main__':
         app.run(host='127.0.0.1', port=PORT, debug=False)
     else:
         # Running as script in development
-        app.run(debug=True, host='0.0.0.0', port=5001)
+        URL = f'http://localhost:{PORT}'
+        
+        # Open browser after 1.5 seconds
+        Timer(1.5, lambda: webbrowser.open(URL)).start()
+        
+        print(f"PyPotteryLayout is starting...")
+        print(f"Opening browser at {URL}")
+        app.run(debug=True, host='0.0.0.0', port=PORT)

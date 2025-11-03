@@ -72,7 +72,7 @@ python flask_launcher.py
 
 # Option 2: Run Flask directly
 python app.py
-# Then open http://127.0.0.1:5001 in your browser
+# Then open http://127.0.0.1:5005 in your browser
 ```
 
 #### Desktop GUI (Alternative)
