@@ -799,30 +799,63 @@ def generate_preview():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+def show_error(message):
+    """Show error message in a dialog (Windows only)"""
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, message, "PyPotteryLayout Error", 0x10)
+    except:
+        pass
+
 if __name__ == '__main__':
     import webbrowser
     from threading import Timer
+    import logging
     
     PORT = 5005
     
     # Determine if running as compiled exe
     if getattr(sys, 'frozen', False):
-        # Running as compiled exe
-        URL = f'http://localhost:{PORT}'
+        # Running as compiled exe - setup logging
+        log_file = os.path.join(os.path.dirname(sys.executable), 'pypotterylayout.log')
+        logging.basicConfig(
+            filename=log_file,
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        logging.info("PyPotteryLayout starting...")
+        logging.info(f"Base path: {os.path.dirname(sys.executable)}")
+        
+        URL = f'http://127.0.0.1:{PORT}'
         
         # Open browser after 1.5 seconds
-        Timer(1.5, lambda: webbrowser.open(URL)).start()
+        def open_browser():
+            try:
+                webbrowser.open(URL)
+                logging.info(f"Browser opened at {URL}")
+            except Exception as e:
+                logging.error(f"Failed to open browser: {e}")
+        
+        Timer(1.5, open_browser).start()
         
         # Run server without debug mode
         print(f"PyPotteryLayout is starting...")
         print(f"Opening browser at {URL}")
-        app.run(host='127.0.0.1', port=PORT, debug=False)
+        
+        try:
+            app.run(host='127.0.0.1', port=PORT, debug=False, use_reloader=False)
+        except Exception as e:
+            error_msg = f"Error starting server: {e}"
+            logging.error(error_msg)
+            show_error(error_msg + "\n\nCheck pypotterylayout.log for details")
+            sys.exit(1)
     else:
         # Running as script in development
         URL = f'http://localhost:{PORT}'
         
-        # Open browser after 1.5 seconds
-        Timer(1.5, lambda: webbrowser.open(URL)).start()
+        # Open browser only in the main process (not in reloader child process)
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            Timer(1.5, lambda: webbrowser.open(URL)).start()
         
         print(f"PyPotteryLayout is starting...")
         print(f"Opening browser at {URL}")

@@ -11,7 +11,7 @@ def create_executable():
     
     # PyInstaller options for Flask app
     options = [
-        "flask_launcher.py",  # Main script (Flask launcher)
+        "app.py",  # Main script
         "--onefile",   # Create single executable file
         "--noconsole",   # Hide console window
         "--name=PyPotteryLayout",  # Executable name
