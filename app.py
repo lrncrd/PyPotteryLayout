@@ -33,7 +33,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['UPLOAD_FOLDER'] = os.path.join(BASE_PATH, 'uploads')
 app.config['OUTPUT_FOLDER'] = os.path.join(BASE_PATH, 'outputs')
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp'}
 app.config['ALLOWED_METADATA'] = {'xlsx', 'csv'}
 
@@ -106,7 +106,7 @@ def serve_output(filename):
 
 @app.route('/api/upload-images', methods=['POST'])
 def upload_images():
-    """Upload multiple images"""
+    """Upload multiple images (supports batch upload)"""
     if 'images' not in request.files:
         return jsonify({'error': 'No images provided'}), 400
     
@@ -114,12 +114,16 @@ def upload_images():
     if not files:
         return jsonify({'error': 'No images selected'}), 400
     
+    # Check if this is the first batch (should clear folder)
+    is_first_batch = request.form.get('is_first_batch', 'true') == 'true'
+    
     session_folder = get_session_folder(create=True)
     
-    # Clear previous images
-    if os.path.exists(session_folder):
-        shutil.rmtree(session_folder)
-    os.makedirs(session_folder)
+    # Clear previous images only on first batch
+    if is_first_batch:
+        if os.path.exists(session_folder):
+            shutil.rmtree(session_folder)
+        os.makedirs(session_folder)
     
     uploaded_files = []
     errors = []
@@ -215,12 +219,22 @@ def preview():
         sort_by = data.get('sortBy', 'alphabetical')
         sort_by_secondary = data.get('sortBySecondary', 'none')
         show_margin_border = data.get('showMarginBorder', False)
+        page_break_on_primary_change = data.get('pageBreakOnPrimaryChange', False)
+        primary_break_type = data.get('primaryBreakType', 'new_page')
+        show_primary_sort_header = data.get('showPrimarySortHeader', False)
+        divider_thickness = int(data.get('dividerThickness', 5))
+        divider_width_percent = int(data.get('dividerWidth', 80))
+        vertical_alignment = data.get('verticalAlignment', 'center')
         
         # Load images
         image_data = backend_logic.load_images_with_info(session_folder)
         
         if not image_data:
             return jsonify({'error': 'No valid images found'}), 400
+        
+        # Limit to first 100 images for preview (don't process entire dataset)
+        total_images_count = len(image_data)
+        image_data = image_data[:25]
         
         # Load metadata if exists
         metadata_files = [f for f in os.listdir(session_folder) if f.startswith('metadata_')]
@@ -233,6 +247,23 @@ def preview():
         image_data = backend_logic.sort_images_hierarchical(
             image_data, sort_by, sort_by_secondary, metadata
         )
+        
+        # Create primary sort key function for page breaks
+        primary_sort_key_func = None
+        if page_break_on_primary_change:
+            def get_primary_sort_value(img_data):
+                """Extract primary sort value from image data."""
+                if sort_by == 'alphabetical':
+                    return img_data['name'].lower()
+                elif sort_by == 'natural_name':
+                    return backend_logic.natural_sort_key(img_data['name'])
+                elif sort_by == 'size':
+                    return img_data.get('size', 0)
+                elif metadata and img_data['name'] in metadata:
+                    value = metadata[img_data['name']].get(sort_by, '')
+                    return value if value is not None else ''
+                return ''
+            primary_sort_key_func = get_primary_sort_value
         
         # Scale images
         image_data = backend_logic.scale_images(image_data, scale_factor)
@@ -266,14 +297,23 @@ def preview():
                 (page_w, page_h),
                 (grid_rows, grid_cols),
                 margin_px, 
-                spacing_px
+                spacing_px,
+                page_break_on_primary_change=page_break_on_primary_change,
+                primary_sort_key=primary_sort_key_func,
+                primary_break_type=primary_break_type,
+                show_primary_sort_header=show_primary_sort_header,
+                divider_thickness=divider_thickness,
+                divider_width_percent=divider_width_percent,
+                vertical_alignment=vertical_alignment
             )
         else:  # puzzle mode
             pages = backend_logic.place_images_puzzle(
                 image_data,
                 (page_w, page_h),
                 margin_px, 
-                spacing_px
+                spacing_px,
+                page_break_on_primary_change=page_break_on_primary_change,
+                primary_sort_key=primary_sort_key_func
             )
         
         if not pages or len(pages) == 0:
@@ -321,6 +361,8 @@ def preview():
             'success': True,
             'preview_urls': preview_urls,
             'total_images': len(image_data),
+            'total_images_in_dataset': total_images_count,
+            'is_preview_limited': total_images_count > 100,
             'total_pages': len(pages)
         })
         
@@ -364,6 +406,12 @@ def generate_layout():
         table_prefix = data.get('table_prefix', 'Tav.')
         sort_by = data.get('sort_by', 'alphabetical')
         sort_by_secondary = data.get('sort_by_secondary', 'none')
+        page_break_on_primary_change = data.get('page_break_on_primary_change', False)
+        primary_break_type = data.get('primary_break_type', 'new_page')
+        show_primary_sort_header = data.get('show_primary_sort_header', False)
+        divider_thickness = int(data.get('divider_thickness', 5))
+        divider_width_percent = int(data.get('divider_width', 80))
+        vertical_alignment = data.get('vertical_alignment', 'center')
         
         # Load images
         image_data = backend_logic.load_images_with_info(session_folder)
@@ -379,6 +427,23 @@ def generate_layout():
         image_data = backend_logic.sort_images_hierarchical(
             image_data, sort_by, sort_by_secondary, metadata
         )
+        
+        # Create primary sort key function for page breaks
+        primary_sort_key_func = None
+        if page_break_on_primary_change:
+            def get_primary_sort_value(img_data):
+                """Extract primary sort value from image data."""
+                if sort_by == 'alphabetical':
+                    return img_data['name'].lower()
+                elif sort_by == 'natural_name':
+                    return backend_logic.natural_sort_key(img_data['name'])
+                elif sort_by == 'size':
+                    return img_data.get('size', 0)
+                elif metadata and img_data['name'] in metadata:
+                    value = metadata[img_data['name']].get(sort_by, '')
+                    return value if value is not None else ''
+                return ''
+            primary_sort_key_func = get_primary_sort_value
         
         # Get page dimensions
         page_w, page_h = backend_logic.get_page_dimensions_px(page_size)
@@ -436,7 +501,14 @@ def generate_layout():
                     margin_px,
                     spacing_px,
                     params,
-                    metadata
+                    metadata,
+                    page_break_on_primary_change=page_break_on_primary_change,
+                    primary_sort_key=primary_sort_key_func,
+                    primary_break_type=primary_break_type,
+                    show_primary_sort_header=show_primary_sort_header,
+                    divider_thickness=divider_thickness,
+                    divider_width_percent=divider_width_percent,
+                    vertical_alignment=vertical_alignment
                 )
             else:
                 # Puzzle mode doesn't support editable layout - fall back to simple embedded SVG
@@ -444,7 +516,9 @@ def generate_layout():
                     image_data,
                     (page_w, page_h),
                     margin_px,
-                    spacing_px
+                    spacing_px,
+                    page_break_on_primary_change=page_break_on_primary_change,
+                    primary_sort_key=primary_sort_key_func
                 )
                 
                 output_filename = f'layout_{timestamp}.zip' if len(pages) > 1 else f'layout_{timestamp}.svg'
@@ -558,14 +632,23 @@ def generate_layout():
                 (page_w, page_h),
                 (grid_rows, grid_cols),
                 margin_px, 
-                spacing_px
+                spacing_px,
+                page_break_on_primary_change=page_break_on_primary_change,
+                primary_sort_key=primary_sort_key_func,
+                primary_break_type=primary_break_type,
+                show_primary_sort_header=show_primary_sort_header,
+                divider_thickness=divider_thickness,
+                divider_width_percent=divider_width_percent,
+                vertical_alignment=vertical_alignment
             )
         else:  # puzzle mode
             pages = backend_logic.place_images_puzzle(
                 image_data,
                 (page_w, page_h),
                 margin_px, 
-                spacing_px
+                spacing_px,
+                page_break_on_primary_change=page_break_on_primary_change,
+                primary_sort_key=primary_sort_key_func
             )
         
         # Add scale bar to each page
@@ -711,8 +794,9 @@ def generate_preview():
         if not image_data:
             return jsonify({'error': 'No valid images found'}), 400
         
-        # Limit to first 20 images for quick preview
-        image_data = image_data[:20]
+        # Limit to first 100 images for quick preview (don't process entire dataset)
+        total_images_count = len(image_data)
+        image_data = image_data[:100]
         
         # Get metadata if exists
         metadata_files = [f for f in os.listdir(session_folder) if f.startswith('metadata_')]
@@ -732,6 +816,12 @@ def generate_preview():
         grid_rows = int(settings.get('gridRows', 4))
         grid_cols = int(settings.get('gridCols', 3))
         show_margin_border = settings.get('showMarginBorder', False)
+        page_break_on_primary_change = settings.get('pageBreakOnPrimaryChange', False)
+        primary_break_type = settings.get('primaryBreakType', 'new_page')
+        show_primary_sort_header = settings.get('showPrimarySortHeader', False)
+        divider_thickness = int(settings.get('dividerThickness', 5))
+        divider_width_percent = int(settings.get('dividerWidth', 80))
+        vertical_alignment = settings.get('verticalAlignment', 'center')
         
         print(f"DEBUG Preview: margin={margin_px}, show_border={show_margin_border}")
         
@@ -739,6 +829,23 @@ def generate_preview():
         image_data = backend_logic.sort_images_hierarchical(
             image_data, sort_by, sort_by_secondary, metadata
         )
+        
+        # Create primary sort key function for page breaks
+        primary_sort_key_func = None
+        if page_break_on_primary_change:
+            def get_primary_sort_value(img_data):
+                """Extract primary sort value from image data."""
+                if sort_by == 'alphabetical':
+                    return img_data['name'].lower()
+                elif sort_by == 'natural_name':
+                    return backend_logic.natural_sort_key(img_data['name'])
+                elif sort_by == 'size':
+                    return img_data.get('size', 0)
+                elif metadata and img_data['name'] in metadata:
+                    value = metadata[img_data['name']].get(sort_by, '')
+                    return value if value is not None else ''
+                return ''
+            primary_sort_key_func = get_primary_sort_value
         
         # Scale images
         image_data = backend_logic.scale_images(image_data, scale_factor)
@@ -753,14 +860,23 @@ def generate_preview():
                 (page_w, page_h),
                 (grid_rows, grid_cols),
                 margin_px, 
-                spacing_px
+                spacing_px,
+                page_break_on_primary_change=page_break_on_primary_change,
+                primary_sort_key=primary_sort_key_func,
+                primary_break_type=primary_break_type,
+                show_primary_sort_header=show_primary_sort_header,
+                divider_thickness=divider_thickness,
+                divider_width_percent=divider_width_percent,
+                vertical_alignment=vertical_alignment
             )
         else:  # puzzle mode
             pages = backend_logic.place_images_puzzle(
                 image_data,
                 (page_w, page_h),
                 margin_px, 
-                spacing_px
+                spacing_px,
+                page_break_on_primary_change=page_break_on_primary_change,
+                primary_sort_key=primary_sort_key_func
             )
         
         print(f"DEBUG Preview: Generated {len(pages)} page(s)")

@@ -111,6 +111,20 @@ function setupEventListeners() {
         tableNumberSettings.style.display = this.checked ? 'block' : 'none';
     });
     
+    // Page break on primary change - show/hide options
+    document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', function() {
+        const primaryBreakOptions = document.getElementById('primaryBreakOptions');
+        primaryBreakOptions.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    // Primary break type - show/hide divider settings
+    document.querySelectorAll('input[name="primaryBreakType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const dividerSettings = document.getElementById('dividerSettings');
+            dividerSettings.style.display = (this.value === 'divider') ? 'block' : 'none';
+        });
+    });
+    
     // Scale factor slider
     scaleFactor.addEventListener('input', function() {
         scaleDisplay.textContent = parseFloat(this.value).toFixed(2) + 'x';
@@ -156,6 +170,15 @@ function setupPreviewAutoUpdate() {
     document.getElementById('sortBy').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('sortBySecondary').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('showMarginBorder').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('verticalAlignment').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('dividerThickness').addEventListener('input', schedulePreviewUpdate);
+    document.getElementById('dividerWidth').addEventListener('input', schedulePreviewUpdate);
+    
+    // Listen to primary break type radio buttons
+    document.querySelectorAll('input[name="primaryBreakType"]').forEach(radio => {
+        radio.addEventListener('change', schedulePreviewUpdate);
+    });
 }
 
 function handleModeChange(e) {
@@ -168,34 +191,60 @@ async function handleImageUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     
+    logTerminal(`Ready to process images...`, 'info');
     logTerminal(`Uploading ${files.length} images...`, 'info');
-    showProgress('Uploading images...');
     
-    const formData = new FormData();
-    for (let file of files) {
-        formData.append('images', file);
-    }
+    // Upload in batches of 100 images to avoid payload size issues
+    const BATCH_SIZE = 100;
+    const totalFiles = files.length;
+    const filesArray = Array.from(files);
+    let uploadedCount = 0;
+    let allErrors = [];
     
     try {
-        const response = await fetch('/api/upload-images', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            uploadedImages = true;
-            uploadStatus.innerHTML = `<span class="upload-success"><i class="bi bi-check-circle"></i> ${data.uploaded} images uploaded</span>`;
-            logTerminal(`Successfully uploaded ${data.uploaded} images`, 'success');
+        // Upload in batches
+        for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
+            const batch = filesArray.slice(i, Math.min(i + BATCH_SIZE, totalFiles));
+            const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(totalFiles / BATCH_SIZE);
             
-            if (data.errors && data.errors.length > 0) {
-                data.errors.forEach(err => logTerminal(err, 'warning'));
+            showProgress(`Uploading batch ${batchNumber}/${totalBatches} (${batch.length} images)...`);
+            logTerminal(`Batch ${batchNumber}/${totalBatches}: ${batch.length} images`, 'info');
+            
+            const formData = new FormData();
+            // Add flag to indicate if this is the first batch (should clear folder)
+            formData.append('is_first_batch', i === 0 ? 'true' : 'false');
+            
+            for (let file of batch) {
+                formData.append('images', file);
             }
-        } else {
-            uploadStatus.innerHTML = `<span class="upload-error"><i class="bi bi-x-circle"></i> Upload failed</span>`;
-            logTerminal(`Upload failed: ${data.error}`, 'error');
+            
+            const response = await fetch('/api/upload-images', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                uploadedCount += data.uploaded;
+                if (data.errors && data.errors.length > 0) {
+                    allErrors = allErrors.concat(data.errors);
+                }
+            } else {
+                throw new Error(data.error || 'Upload failed');
+            }
         }
+        
+        // All batches uploaded successfully
+        uploadedImages = true;
+        uploadStatus.innerHTML = `<span class="upload-success"><i class="bi bi-check-circle"></i> ${uploadedCount} images uploaded</span>`;
+        logTerminal(`Successfully uploaded ${uploadedCount} images`, 'success');
+        
+        if (allErrors.length > 0) {
+            allErrors.forEach(err => logTerminal(err, 'warning'));
+        }
+        
     } catch (error) {
         uploadStatus.innerHTML = `<span class="upload-error"><i class="bi bi-x-circle"></i> Upload error</span>`;
         logTerminal(`Error: ${error.message}`, 'error');
@@ -204,7 +253,9 @@ async function handleImageUpload(e) {
         updateUIState();
         
         // Generate preview after upload
-        generateLayoutPreview();
+        if (uploadedImages) {
+            generateLayoutPreview();
+        }
     }
 }
 
@@ -252,7 +303,12 @@ async function generateLayoutPreview() {
             tableFontSize: document.getElementById('tableFontSize').value,
             tablePrefix: document.getElementById('tablePrefix').value,
             captionColumn: document.getElementById('captionColumn')?.value,
-            showMarginBorder: document.getElementById('showMarginBorder').checked
+            showMarginBorder: document.getElementById('showMarginBorder').checked,
+            pageBreakOnPrimaryChange: document.getElementById('pageBreakOnPrimaryChange').checked,
+            primaryBreakType: document.querySelector('input[name="primaryBreakType"]:checked')?.value || 'new_page',
+            dividerThickness: parseInt(document.getElementById('dividerThickness').value) || 5,
+            dividerWidth: parseInt(document.getElementById('dividerWidth').value) || 80,
+            verticalAlignment: document.getElementById('verticalAlignment').value
         };
         
         const response = await fetch('/api/preview', {
@@ -269,6 +325,12 @@ async function generateLayoutPreview() {
             // Display only the first preview image with large size
             const firstPreviewUrl = data.preview_urls[0];
             
+            // Build preview message
+            let previewMessage = `<strong>${data.total_images} images</strong> distributed across <strong>${data.total_pages} page(s)</strong>`;
+            if (data.is_preview_limited) {
+                previewMessage = `<strong class="text-warning">Preview limited to first ${data.total_images} images</strong> (${data.total_images_in_dataset} total in dataset)<br>` + previewMessage;
+            }
+            
             previewGrid.innerHTML = `
                 <div class="preview-layout-single fade-in">
                     <div class="preview-single-container">
@@ -280,13 +342,18 @@ async function generateLayoutPreview() {
                     <div class="text-center mt-3">
                         <p class="text-muted">
                             <i class="bi bi-eye"></i> Preview of Page 1 - Click to zoom<br>
-                            <strong>${data.total_images} images</strong> distributed across <strong>${data.total_pages} page(s)</strong>
+                            ${previewMessage}
                         </p>
                     </div>
                 </div>
             `;
             previewSection.style.display = 'block';
-            logTerminal(`Preview generated: ${data.total_images} images on ${data.total_pages} page(s)`, 'success');
+            
+            if (data.is_preview_limited) {
+                logTerminal(`Preview generated (limited to ${data.total_images}/${data.total_images_in_dataset} images): ${data.total_pages} page(s)`, 'warning');
+            } else {
+                logTerminal(`Preview generated: ${data.total_images} images on ${data.total_pages} page(s)`, 'success');
+            }
         } else {
             throw new Error(data.error || 'Preview generation failed');
         }
@@ -377,7 +444,12 @@ async function handleGenerate() {
         table_prefix: document.getElementById('tablePrefix').value,
         sort_by: document.getElementById('sortBy').value,
         sort_by_secondary: document.getElementById('sortBySecondary').value,
-        show_margin_border: document.getElementById('showMarginBorder').checked
+        show_margin_border: document.getElementById('showMarginBorder').checked,
+        page_break_on_primary_change: document.getElementById('pageBreakOnPrimaryChange').checked,
+        primary_break_type: document.querySelector('input[name="primaryBreakType"]:checked')?.value || 'new_page',
+        divider_thickness: parseInt(document.getElementById('dividerThickness').value) || 5,
+        divider_width: parseInt(document.getElementById('dividerWidth').value) || 80,
+        vertical_alignment: document.getElementById('verticalAlignment').value
     };
     
     logTerminal(`Settings: ${JSON.stringify(settings, null, 2)}`, 'info');

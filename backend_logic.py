@@ -182,28 +182,28 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
     def get_sort_key(img_data, sort_field):
         """Ottieni la chiave di ordinamento per un'immagine."""
         if sort_field == 'random':
-            return random.random()
+            return (0, random.random(), '')  # (type, numeric_value, string_value)
         elif sort_field == 'natural_name':
-            return natural_sort_key(img_data['name'])
+            return (2, 0, natural_sort_key(img_data['name']))  # String type
         elif sort_field == 'alphabetical':
-            return img_data['name'].lower()
+            return (2, 0, img_data['name'].lower())  # String type
         else:
             # Metadata sorting
             if metadata and img_data['name'] in metadata:
                 value = metadata[img_data['name']].get(sort_field, '')
                 # If value is None or empty, use fallback value
                 if value is None:
-                    value = 'zzz_empty'
+                    return (2, 0, 'zzz_empty')  # String type
                 elif isinstance(value, (int, float)):
-                    return value  # Keep numbers as numbers for correct sorting
+                    return (1, float(value), '')  # Numeric type
                 else:
                     # For strings, try to convert to number if possible
                     str_value = str(value).strip()
                     try:
-                        return float(str_value)
+                        return (1, float(str_value), '')  # Numeric type
                     except ValueError:
-                        return str_value.lower()
-            return 'zzz_no_metadata'
+                        return (2, 0, str_value.lower())  # String type
+            return (2, 0, 'zzz_no_metadata')  # String type
     
     # Apply hierarchical sorting
     if primary_sort == 'random' and (not secondary_sort or secondary_sort == 'none'):
@@ -215,23 +215,17 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
             primary_key = get_sort_key(img_data, primary_sort)
             
             if secondary_sort and secondary_sort != 'none':
-                # Special handling for when primary is random but secondary is not
-                if primary_sort == 'random':
-                    # If primary is random, use a random value as primary
-                    # but keep secondary sorting deterministic
-                    primary_key = random.random()
-                
                 secondary_key = get_sort_key(img_data, secondary_sort)
                 
-                # If secondary is random, generate random value
-                if secondary_sort == 'random':
-                    secondary_key = random.random()
-                
-                return (primary_key, secondary_key, natural_sort_key(img_data['name']))
+                # Return tuple of tuples for proper comparison
+                # Each key is now (type, numeric, string) so comparisons work
+                return (primary_key, secondary_key, (2, 0, natural_sort_key(img_data['name'])))
             else:
-                return (primary_key, natural_sort_key(img_data['name']))
+                return (primary_key, (2, 0, natural_sort_key(img_data['name'])))
         
         image_data.sort(key=composite_sort_key)
+    
+    return image_data
     
     return image_data
 
@@ -323,7 +317,23 @@ def add_captions_to_images(image_data, metadata, font_size, caption_padding, rem
     return image_data
 
 
-def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, status_callback=print):
+def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, 
+                      page_break_on_primary_change=False, primary_sort_key=None, 
+                      primary_break_type='new_page', show_primary_sort_header=False,
+                      divider_thickness=5, divider_width_percent=80,
+                      vertical_alignment='center', status_callback=print):
+    """
+    Place images in a grid layout.
+    
+    Args:
+        page_break_on_primary_change: If True, start a new page when primary sort value changes
+        primary_sort_key: Function to extract the primary sort value from image_data item
+        primary_break_type: 'new_page' or 'divider' - how to separate groups
+        show_primary_sort_header: Deprecated - not used
+        divider_thickness: Thickness of divider line in pixels (default 5)
+        divider_width_percent: Width of divider as percentage of available width (default 80)
+        vertical_alignment: 'center' (default) or 'top' - vertical positioning of content on page
+    """
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
     available_width = page_width - (2 * margin_px)
@@ -331,13 +341,25 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
     pages, image_index = [], 0
     total_images = len(image_data)
     
+    # Track the current primary sort value for page breaks
+    current_primary_value = None
+    
     status_callback(f"Starting grid layout: {total_images} images to place")
     while image_index < len(image_data):
         current_page = Image.new('RGB', page_size_px, 'white')
         page_has_images = False
         
+        # Set the primary value for this page (from the first image on the page)
+        if page_break_on_primary_change and primary_sort_key and image_index < len(image_data):
+            page_primary_value = primary_sort_key(image_data[image_index])
+            if current_primary_value is not None and page_primary_value != current_primary_value:
+                # Primary value changed - log it
+                status_callback(f"Page break: primary sort changed from {current_primary_value} to {page_primary_value}")
+            current_primary_value = page_primary_value
+        
         # Collect all rows for this page first to calculate total height
         page_rows = []
+        divider_rows = []  # Track which rows should have a divider before them
         temp_image_index = image_index
         temp_rows_on_page = 0
         
@@ -346,8 +368,31 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
             row_images, current_row_width, row_height = [], 0, 0
             temp_index = temp_image_index
             
+            # Check for primary sort change BEFORE starting a new row
+            if page_break_on_primary_change and primary_sort_key and temp_rows_on_page > 0:
+                # Check if the next image has a different primary sort value
+                if temp_image_index < len(image_data):
+                    next_primary_value = primary_sort_key(image_data[temp_image_index])
+                    if next_primary_value != current_primary_value:
+                        # If using divider or header, mark this row; if new_page, stop here
+                        if primary_break_type == 'new_page':
+                            status_callback(f"Stopping page: primary sort will change at next image")
+                            break
+                        else:  # divider or header mode
+                            status_callback(f"Group change: primary sort changed from {current_primary_value} to {next_primary_value}")
+                            divider_rows.append((temp_rows_on_page, next_primary_value))  # Mark this row index for divider/header
+                            current_primary_value = next_primary_value  # Update for divider/header mode
+            
             # Build the row
             while temp_index < len(image_data) and len(row_images) < suggested_cols:
+                # Check for primary sort change within the row (only after first image in row)
+                if page_break_on_primary_change and primary_sort_key and len(row_images) > 0:
+                    if temp_index < len(image_data):
+                        next_primary_value = primary_sort_key(image_data[temp_index])
+                        if next_primary_value != current_primary_value:
+                            # Stop building this row
+                            break
+                
                 img = image_data[temp_index]['img']
                 needed_width = current_row_width + img.width + (spacing_px if row_images else 0)
                 if needed_width <= available_width:
@@ -377,24 +422,55 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                 status_callback("WARNING: Remaining images may be too large.")
             break
         
-        # Calculate total content height
+        # Calculate total content height (including dividers)
+        divider_margin = 20  # Space before and after divider
+        
         total_content_height = sum(row_height for _, row_height in page_rows)
         total_spacing_height = spacing_px * (len(page_rows) - 1) if len(page_rows) > 1 else 0
-        total_height_needed = total_content_height + total_spacing_height
         
-        # Calculate starting Y position to center content vertically
-        if total_height_needed < available_height:
-            # Center the content vertically in available space
-            start_y = margin_px + (available_height - total_height_needed) // 2
-        else:
-            # Content fills available space, start at margin
+        # Calculate space needed for dividers
+        total_separator_height = len(divider_rows) * (divider_thickness + 2 * divider_margin)
+        
+        total_height_needed = total_content_height + total_spacing_height + total_separator_height
+        
+        # Calculate starting Y position based on vertical alignment
+        if vertical_alignment == 'top':
+            # Always start at top margin
             start_y = margin_px
+        else:  # center (default)
+            if total_height_needed < available_height:
+                # Center the content vertically in available space
+                start_y = margin_px + (available_height - total_height_needed) // 2
+            else:
+                # Content fills available space, start at margin
+                start_y = margin_px
         
         # Second pass: actually place the images with centered layout
         current_y = start_y
         images_placed_on_page = 0
         
-        for row_images, row_height in page_rows:
+        # Build a dict for easy lookup of divider rows
+        divider_dict = {row_idx: primary_value for row_idx, primary_value in divider_rows}
+        
+        for row_idx, (row_images, row_height) in enumerate(page_rows):
+            # Add divider line if this row is marked for one
+            if row_idx in divider_dict:
+                # Draw horizontal divider line
+                from PIL import ImageDraw
+                draw = ImageDraw.Draw(current_page)
+                divider_y = current_y + divider_margin
+                
+                # Calculate divider width based on percentage
+                divider_width = int(available_width * (divider_width_percent / 100))
+                divider_start_x = margin_px + (available_width - divider_width) // 2
+                divider_end_x = divider_start_x + divider_width
+                
+                draw.line(
+                    [(divider_start_x, divider_y), (divider_end_x, divider_y)],
+                    fill='black',
+                    width=divider_thickness
+                )
+                current_y += divider_thickness + 2 * divider_margin
             # Check if this row fits
             if current_y + row_height > page_height - margin_px:
                 # This row doesn't fit, stop here but don't lose the images
@@ -468,7 +544,55 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
     return pages
 
 
-def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, status_callback=print):
+def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, 
+                        page_break_on_primary_change=False, primary_sort_key=None, status_callback=print):
+    """
+    Place images in a puzzle layout.
+    
+    Args:
+        page_break_on_primary_change: If True, group images by primary sort value on separate pages
+        primary_sort_key: Function to extract the primary sort value from image_data item
+    """
+    page_width, page_height = page_size_px
+    bin_width, bin_height = page_width - (2 * margin_px), page_height - (2 * margin_px)
+    total_images = len(image_data)
+    
+    status_callback(f"Starting puzzle layout: {total_images} images to place")
+    
+    # If page break on primary change is enabled, group images by primary value
+    if page_break_on_primary_change and primary_sort_key:
+        status_callback("Grouping images by primary sort value...")
+        
+        # Group images by primary sort value
+        from collections import OrderedDict
+        groups = OrderedDict()
+        for img_data in image_data:
+            primary_value = primary_sort_key(img_data)
+            if primary_value not in groups:
+                groups[primary_value] = []
+            groups[primary_value].append(img_data)
+        
+        status_callback(f"Created {len(groups)} groups by primary sort value")
+        
+        # Process each group separately
+        all_pages = []
+        for group_value, group_images in groups.items():
+            status_callback(f"Processing group '{group_value}' with {len(group_images)} images...")
+            group_pages = _place_images_puzzle_internal(
+                group_images, page_size_px, margin_px, spacing_px, status_callback
+            )
+            all_pages.extend(group_pages)
+        
+        return all_pages
+    else:
+        # No grouping - process all images together
+        return _place_images_puzzle_internal(
+            image_data, page_size_px, margin_px, spacing_px, status_callback
+        )
+
+
+def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, status_callback=print):
+    """Internal function to pack images using rectpack algorithm."""
     page_width, page_height = page_size_px
     bin_width, bin_height = page_width - (2 * margin_px), page_height - (2 * margin_px)
     total_images = len(image_data)
@@ -1847,7 +1971,11 @@ def _add_table_number_to_svg(svg, width_px, height_px, table_number, position, f
     table_text_element.text = table_text
 
 
-def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, params, metadata=None, status_callback=print):
+def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, params, metadata=None, 
+                                          page_break_on_primary_change=False, primary_sort_key=None, 
+                                          primary_break_type='new_page', show_primary_sort_header=False,
+                                          divider_thickness=5, divider_width_percent=80,
+                                          vertical_alignment='center', status_callback=print):
     """Calculate positions for grid layout, returning position data for editable output."""
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
@@ -1858,8 +1986,19 @@ def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, m
     image_index = 0
     page_num = 0
     
+    # Track the current primary sort value for page breaks
+    current_primary_value = None
+    
     while image_index < len(image_data):
         page_positions = []
+        
+        # Set the primary value for this page (from the first image on the page)
+        if page_break_on_primary_change and primary_sort_key and image_index < len(image_data):
+            page_primary_value = primary_sort_key(image_data[image_index])
+            if current_primary_value is not None and page_primary_value != current_primary_value:
+                # Primary value changed - log it
+                status_callback(f"Page break: primary sort changed from {current_primary_value} to {page_primary_value}")
+            current_primary_value = page_primary_value
         
         # Collect all rows for this page first to calculate total height
         page_rows = []
@@ -1873,8 +2012,25 @@ def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, m
             row_height = 0
             temp_index = temp_image_index
             
+            # Check for primary sort change BEFORE starting a new row
+            if page_break_on_primary_change and primary_sort_key and temp_rows_on_page > 0:
+                if temp_image_index < len(image_data):
+                    next_primary_value = primary_sort_key(image_data[temp_image_index])
+                    if next_primary_value != current_primary_value:
+                        # For editable SVG, only support new_page mode (not divider/header)
+                        # Stop building rows for this page
+                        break
+            
             # Build the row
             while temp_index < len(image_data) and len(row_images) < suggested_cols:
+                # Check for primary sort change within the row (only after first image in row)
+                if page_break_on_primary_change and primary_sort_key and len(row_images) > 0:
+                    if temp_index < len(image_data):
+                        next_primary_value = primary_sort_key(image_data[temp_index])
+                        if next_primary_value != current_primary_value:
+                            # Stop building this row
+                            break
+                
                 img_data = image_data[temp_index]
                 img = img_data['img']
                 needed_width = current_row_width + img.width + (spacing_px if row_images else 0)
@@ -1917,13 +2073,17 @@ def create_editable_layout_positions_grid(image_data, page_size_px, grid_size, m
         total_spacing_height = spacing_px * (len(page_rows) - 1) if len(page_rows) > 1 else 0
         total_height_needed = total_content_height + total_spacing_height
         
-        # Calculate starting Y position to center content vertically
-        if total_height_needed < available_height:
-            # Center the content vertically in available space
-            start_y = margin_px + (available_height - total_height_needed) // 2
-        else:
-            # Content fills available space, start at margin
+        # Calculate starting Y position based on vertical alignment
+        if vertical_alignment == 'top':
+            # Always start at top margin
             start_y = margin_px
+        else:  # center (default)
+            if total_height_needed < available_height:
+                # Center the content vertically in available space
+                start_y = margin_px + (available_height - total_height_needed) // 2
+            else:
+                # Content fills available space, start at margin
+                start_y = margin_px
         
         # Second pass: actually calculate positions with centered layout
         current_y = start_y

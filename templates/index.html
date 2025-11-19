@@ -285,6 +285,13 @@
                                     <label for="spacingPx" class="form-label">Spacing</label>
                                     <input type="number" class="form-control form-control-sm" id="spacingPx" value="10" min="0">
                                 </div>
+                                <div class="col-12 mb-2">
+                                    <label for="verticalAlignment" class="form-label">Vertical Alignment</label>
+                                    <select class="form-select form-select-sm" id="verticalAlignment">
+                                        <option value="center" selected>Center (default)</option>
+                                        <option value="top">Top</option>
+                                    </select>
+                                </div>
                                 <div class="col-12">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="showMarginBorder">
@@ -334,6 +341,38 @@
                                     <option value="size">Size</option>
                                     <option value="random">Random</option>
                                 </select>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="pageBreakOnPrimaryChange">
+                                <label class="form-check-label" for="pageBreakOnPrimaryChange">
+                                    Enable primary sort grouping
+                                </label>
+                            </div>
+                            <div id="primaryBreakOptions" style="display: none; margin-left: 20px; margin-bottom: 10px;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="primaryBreakType" id="breakTypeNewPage" value="new_page" checked>
+                                    <label class="form-check-label" for="breakTypeNewPage">
+                                        New page
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="primaryBreakType" id="breakTypeDivider" value="divider">
+                                    <label class="form-check-label" for="breakTypeDivider">
+                                        Horizontal divider line
+                                    </label>
+                                </div>
+                                <div id="dividerSettings" style="display: none; margin-top: 10px;">
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <label for="dividerThickness" class="form-label" style="font-size: 0.85rem;">Thickness (px)</label>
+                                            <input type="number" class="form-control form-control-sm" id="dividerThickness" value="5" min="1" max="20">
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="dividerWidth" class="form-label" style="font-size: 0.85rem;">Width (%)</label>
+                                            <input type="number" class="form-control form-control-sm" id="dividerWidth" value="80" min="10" max="100" step="5">
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label for="sortBySecondary" class="form-label">Secondary Sort</label>
