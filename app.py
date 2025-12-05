@@ -712,7 +712,7 @@ if __name__ == '__main__':
         except Exception as e:
             error_msg = f"Error starting server: {e}"
             logging.error(error_msg)
-            show_error(error_msg + "\n\nCheck pypotterylayout.log for details")
+            #show_error(error_msg + "\n\nCheck pypotterylayout.log for details")
             sys.exit(1)
     else:
         # Running as script in development

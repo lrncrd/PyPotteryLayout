@@ -180,6 +180,14 @@ The build script automatically:
 
 ## 📊 Recent Updates
 
+### v0.3.0
+
+- **New features**:
+  - Improved SVG export
+  - Data handling optimizations
+  - Upgraded preview rendering
+
+
 ### v0.2.0 (Flask Web Version)
 
 - **New Web Interface**: Modern browser-based UI
