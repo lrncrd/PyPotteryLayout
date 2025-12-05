@@ -322,28 +322,39 @@ async function generateLayoutPreview() {
         const data = await response.json();
         
         if (data.success) {
-            // Display only the first preview image with large size
+            // Display only the first preview image with elegant paper design
             const firstPreviewUrl = data.preview_urls[0];
             
-            // Build preview message
-            let previewMessage = `<strong>${data.total_images} images</strong> distributed across <strong>${data.total_pages} page(s)</strong>`;
+            // Build preview badges
+            let limitedWarning = '';
             if (data.is_preview_limited) {
-                previewMessage = `<strong class="text-warning">Preview limited to first ${data.total_images} images</strong> (${data.total_images_in_dataset} total in dataset)<br>` + previewMessage;
+                limitedWarning = `
+                    <div class="alert alert-warning py-2 px-3 mb-3" style="border-radius: 8px; font-size: 0.85rem;">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        Preview limited to first <strong>${data.total_images}</strong> of <strong>${data.total_images_in_dataset}</strong> total images
+                    </div>
+                `;
             }
             
             previewGrid.innerHTML = `
                 <div class="preview-layout-single fade-in">
-                    <div class="preview-single-container">
-                        <img src="${firstPreviewUrl}?t=${new Date().getTime()}" 
-                             alt="Layout Preview - Page 1" 
-                             class="preview-single-image"
-                             onclick="openPreviewModal('${firstPreviewUrl}', 1)">
+                    ${limitedWarning}
+                    <div class="preview-paper-wrapper">
+                        <div class="preview-paper">
+                            <img src="${firstPreviewUrl}?t=${new Date().getTime()}" 
+                                 alt="Layout Preview - Page 1" 
+                                 class="preview-single-image"
+                                 onclick="openPreviewModal('${firstPreviewUrl}', 1)">
+                            <span class="zoom-hint"><i class="bi bi-zoom-in"></i> Click to zoom</span>
+                        </div>
+                        <div class="page-indicator">Page 1 of ${data.total_pages}</div>
                     </div>
-                    <div class="text-center mt-3">
-                        <p class="text-muted">
-                            <i class="bi bi-eye"></i> Preview of Page 1 - Click to zoom<br>
-                            ${previewMessage}
-                        </p>
+                    <div class="preview-info-badge">
+                        <i class="bi bi-images"></i>
+                        <strong>${data.total_images}</strong> images
+                        <span class="divider"></span>
+                        <i class="bi bi-files"></i>
+                        <strong>${data.total_pages}</strong> page${data.total_pages > 1 ? 's' : ''}
                     </div>
                 </div>
             `;
