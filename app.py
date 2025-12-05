@@ -384,7 +384,7 @@ def preview():
             if show_margin_border:
                 from PIL import ImageDraw
                 draw = ImageDraw.Draw(page)
-                draw.rectangle([margin_px, margin_px, page_w - margin_px, page_h - margin_px], outline="red", width=2)
+                draw.rectangle([margin_px, margin_px, page_w - margin_px, page_h - margin_px], outline="black", width=2)
             
             # Resize for preview
             preview_width = 1200
@@ -551,7 +551,7 @@ def generate_layout():
                 from PIL import ImageDraw
                 for page in pil_pages:
                     draw = ImageDraw.Draw(page)
-                    draw.rectangle([margin_px, margin_px, page_w - margin_px, page_h - margin_px], outline="red", width=2)
+                    draw.rectangle([margin_px, margin_px, page_w - margin_px, page_h - margin_px], outline="black", width=2)
 
             output_filename = f'layout_{timestamp}.pdf'
             output_path = os.path.join(output_folder, output_filename)
