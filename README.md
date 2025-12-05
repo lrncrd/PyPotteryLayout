@@ -9,9 +9,18 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/lrncrd/PyPotteryLayout)
 
 Create artefacts table effortless
+---
+
+### ☕ Support This Project
+
+If you find PyPotteryInk useful for your research, consider supporting its development:
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/lrncrd)
+
+Your support helps maintain and improve this open-source tool for the archaeological community!
+
 
 </div>
-
 
 ## Introduction
 
