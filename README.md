@@ -60,13 +60,8 @@ This efficiency makes the tool particularly valuable for projects with large ass
 
 </div>
 
-1. Download `PyPotteryLayout.exe` from [Releases](../../releases)
-2. Double-click to run - **no installation required**
-3. Your default browser will open automatically
-4. Upload images, configure layout, and export
-5. Close the browser when finished
-
-> **Note**: The executable runs a local web server. All processing happens on your computer - no internet connection required after download.
+> [!NOTE]
+> Check out https://github.com/lrncrd/PyPottery the suite installation
 
 ### Run from Source (All Platforms)
 
