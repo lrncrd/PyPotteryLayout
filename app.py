@@ -36,7 +36,7 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp'}
 app.config['ALLOWED_METADATA'] = {'xlsx', 'csv'}
 
-VERSION = "0.3.0"  # Version bump for SVG support
+VERSION = "0.3.1"  # Version bump for SVG support
 
 # Ensure folders exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -263,6 +263,9 @@ def preview():
         divider_thickness = int(data.get('dividerThickness', 5))
         divider_width_percent = int(data.get('dividerWidth', 80))
         vertical_alignment = data.get('verticalAlignment', 'center')
+        add_object_number = data.get('addObjectNumber', False)
+        object_number_position = data.get('objectNumberPosition', 'bottom_center')
+        object_number_font_size = int(data.get('objectNumberFontSize', 18))
         
         # Load images
         image_data = backend_logic.load_images_with_info(session_folder)
@@ -333,13 +336,19 @@ def preview():
                 primary_break_type=primary_break_type,
                 divider_thickness=divider_thickness,
                 divider_width_percent=divider_width_percent,
-                vertical_alignment=vertical_alignment
+                vertical_alignment=vertical_alignment,
+                add_object_number=add_object_number,
+                object_number_position=object_number_position,
+                object_number_font_size=object_number_font_size
             )
         else:
             pil_pages, _ = backend_logic.place_images_puzzle(
                 image_data, (page_w, page_h), margin_px, spacing_px,
                 page_break_on_primary_change=page_break_on_primary_change,
-                primary_sort_key=primary_sort_key_func
+                primary_sort_key=primary_sort_key_func,
+                add_object_number=add_object_number,
+                object_number_position=object_number_position,
+                object_number_font_size=object_number_font_size
             )
         
         if not pil_pages:
@@ -452,6 +461,9 @@ def generate_layout():
         divider_width_percent = int(data.get('divider_width', 80))
         vertical_alignment = data.get('vertical_alignment', 'center')
         show_margin_border = data.get('show_margin_border', False)
+        add_object_number = data.get('add_object_number', False)
+        object_number_position = data.get('object_number_position', 'bottom_center')
+        object_number_font_size = int(data.get('object_number_font_size', 18))
 
         # Load images & Metadata
         image_data = backend_logic.load_images_with_info(session_folder)
@@ -515,13 +527,19 @@ def generate_layout():
                 primary_break_type=primary_break_type,
                 divider_thickness=divider_thickness,
                 divider_width_percent=divider_width_percent,
-                vertical_alignment=vertical_alignment
+                vertical_alignment=vertical_alignment,
+                add_object_number=add_object_number,
+                object_number_position=object_number_position,
+                object_number_font_size=object_number_font_size
             )
         else:
             pil_pages, svg_pages = backend_logic.place_images_puzzle(
                 image_data, (page_w, page_h), margin_px, spacing_px,
                 page_break_on_primary_change=page_break_on_primary_change,
-                primary_sort_key=primary_sort_key_func
+                primary_sort_key=primary_sort_key_func,
+                add_object_number=add_object_number,
+                object_number_position=object_number_position,
+                object_number_font_size=object_number_font_size
             )
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')

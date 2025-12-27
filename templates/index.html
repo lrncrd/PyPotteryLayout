@@ -458,6 +458,31 @@
                                 </div>
                             </div>
 
+                            <hr class="my-3">
+
+                            <!-- Object Numbering -->
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="addObjectNumber">
+                                <label class="form-check-label" for="addObjectNumber">Add object number (1, 2,
+                                    3...)</label>
+                            </div>
+                            <div id="objectNumberSettings" style="display: none;">
+                                <div class="row">
+                                    <div class="col-6 mb-3">
+                                        <label for="objectNumberPosition" class="form-label">Position</label>
+                                        <select class="form-select form-select-sm" id="objectNumberPosition">
+                                            <option value="bottom_center" selected>Below (Centered)</option>
+                                            <option value="bottom_left">Bottom Left</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 mb-3">
+                                        <label for="objectNumberFontSize" class="form-label">Font Size</label>
+                                        <input type="number" class="form-control form-control-sm"
+                                            id="objectNumberFontSize" value="18" min="8" max="72">
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="mb-3">
                                 <label for="sortBy" class="form-label">Primary Sort</label>
                                 <select class="form-select form-select-sm" id="sortBy">
@@ -648,7 +673,7 @@
 
                     <h2 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem; color: #000;">
                         PyPotteryLayout</h2>
-                    <p style="font-size: 1.2rem; color: #666; margin-bottom: 1.5rem;">Version 0.3.0</p>
+                    <p style="font-size: 1.2rem; color: #666; margin-bottom: 1.5rem;">Version 0.3.1</p>
 
                     <p style="font-size: 1rem; color: #333; margin-bottom: 1.5rem; line-height: 1.6;">
                         Create archaeological artefacts tables effortlessly<br>

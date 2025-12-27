@@ -139,8 +139,17 @@ def get_font(size):
 def get_metadata_headers(filepath):
     if not filepath or not os.path.exists(filepath): return None
     try:
-        workbook = openpyxl.load_workbook(filepath)
-        return [cell.value for cell in workbook.active[1]]
+        # Check file extension
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                return header
+        else:
+            # Excel file
+            workbook = openpyxl.load_workbook(filepath)
+            return [cell.value for cell in workbook.active[1]]
     except Exception: return None
 
 
@@ -148,17 +157,32 @@ def load_metadata(filepath, status_callback=print):
     if not filepath: return None
     status_callback(f"Loading metadata from: {filepath}...")
     try:
-        workbook = openpyxl.load_workbook(filepath)
-        sheet = workbook.active
         metadata = {}
-        header = [cell.value for cell in sheet[1]]
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if row and row[0]:
-                metadata[row[0]] = {header[i]: row[i] for i in range(1, len(row))}
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                if not header:
+                    status_callback("CSV file is empty or has no header.")
+                    return None
+                for row in reader:
+                    if row and row[0]:
+                        metadata[row[0]] = {header[i]: row[i] if i < len(row) else None for i in range(1, len(header))}
+        else:
+            # Excel file
+            workbook = openpyxl.load_workbook(filepath)
+            sheet = workbook.active
+            header = [cell.value for cell in sheet[1]]
+            for row in sheet.iter_rows(min_row=2, values_only=True):
+                if row and row[0]:
+                    metadata[row[0]] = {header[i]: row[i] for i in range(1, len(row))}
+        
         status_callback(f"Loaded metadata for {len(metadata)} items.")
         return metadata
     except Exception as e:
-        status_callback(f"Error loading Excel file: {e}")
+        status_callback(f"Error loading metadata file: {e}")
         return None
 
 
@@ -417,7 +441,8 @@ def _render_item_to_svg(svg_gen, item_data, abs_x, abs_y):
 def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, 
                       page_break_on_primary_change=False, primary_sort_key=None, 
                       primary_break_type='new_page', divider_thickness=5, divider_width_percent=80,
-                      vertical_alignment='center', status_callback=print):
+                      vertical_alignment='center', add_object_number=False, object_number_position='bottom_center', 
+                      object_number_font_size=18, status_callback=print):
     
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
@@ -434,6 +459,12 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
     
     status_callback(f"Starting grid layout: {total_images} images to place")
     
+    # Font for object numbering
+    number_font = None
+    if add_object_number:
+        try: number_font = get_font(object_number_font_size)
+        except: number_font = ImageFont.load_default()
+
     while image_index < len(image_data):
         # Initialize PIL Page
         current_pil_page = Image.new('RGB', page_size_px, 'white')
@@ -443,6 +474,7 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         current_svg_gen.add_rect(0, 0, page_width, page_height, fill="white")
         
         page_has_images = False
+        page_object_counter = 1 # Reset per page
         
         if page_break_on_primary_change and primary_sort_key and image_index < len(image_data):
             page_primary_value = primary_sort_key(image_data[image_index])
@@ -544,11 +576,45 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                 # 2. SVG Add (Semantic)
                 _render_item_to_svg(current_svg_gen, img_data, current_x, paste_y)
                 
+                # 3. Object Numbering
+                if add_object_number:
+                    num_str = str(page_object_counter)
+                    page_object_counter += 1
+                    
+                    draw = ImageDraw.Draw(current_pil_page)
+                    font_h = object_number_font_size
+                    padding_num = 5
+                    
+                    if object_number_position == 'bottom_left':
+                        # Overlay at bottom-left inside the image block
+                        nx = current_x + 5
+                        ny = paste_y + img.height - font_h - padding_num
+                        
+                        draw.text((nx, ny), num_str, font=number_font, fill="black")
+                        current_svg_gen.add_text(num_str, nx, ny + font_h, font_h, font_family="Arial", anchor="start")
+                        
+                    elif object_number_position == 'bottom_center':
+                        # Place BELOW the image block (after it, not overlapping)
+                        nx = current_x + (img.width // 2)
+                        ny = paste_y + img.height + padding_num  # BELOW the image
+                        
+                        # PIL - center text
+                        bbox = draw.textbbox((0,0), num_str, font=number_font)
+                        tw = bbox[2] - bbox[0]
+                        draw.text((nx - tw/2, ny), num_str, font=number_font, fill="black")
+                        # SVG
+                        current_svg_gen.add_text(num_str, nx, ny + font_h, font_h, font_family="Arial", anchor="middle")
+
                 current_x += img.width + spacing_px
                 page_has_images = True
                 images_placed_on_page += 1
             
-            current_y += row_height + spacing_px
+            # Add extra space for object number if it's placed below
+            extra_number_space = 0
+            if add_object_number and object_number_position == 'bottom_center':
+                extra_number_space = object_number_font_size + 10  # font height + padding
+            
+            current_y += row_height + spacing_px + extra_number_space
             image_index += len(row_images)
         
         if page_has_images:
@@ -581,7 +647,9 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
 
 
 def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, 
-                        page_break_on_primary_change=False, primary_sort_key=None, status_callback=print):
+                        page_break_on_primary_change=False, primary_sort_key=None, 
+                        add_object_number=False, object_number_position='bottom_center', 
+                        object_number_font_size=18, status_callback=print):
     
     # Wrapper to handle grouping, then delegates to internal
     if page_break_on_primary_change and primary_sort_key:
@@ -594,15 +662,26 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
         
         all_pil, all_svg = [], []
         for k, g_imgs in groups.items():
-            p, s = _place_images_puzzle_internal(g_imgs, page_size_px, margin_px, spacing_px, status_callback)
+            p, s = _place_images_puzzle_internal(g_imgs, page_size_px, margin_px, spacing_px, 
+                                               add_object_number=add_object_number, 
+                                               object_number_position=object_number_position,
+                                               object_number_font_size=object_number_font_size,
+                                               status_callback=status_callback)
             all_pil.extend(p)
             all_svg.extend(s)
         return all_pil, all_svg
     else:
-        return _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, status_callback)
+        return _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, 
+                                           add_object_number=add_object_number, 
+                                           object_number_position=object_number_position,
+                                           object_number_font_size=object_number_font_size,
+                                           status_callback=status_callback)
 
 
-def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, status_callback=print):
+def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, 
+                                  add_object_number=False, object_number_position='bottom_center',
+                                  object_number_font_size=18, 
+                                  status_callback=print):
     page_width, page_height = page_size_px
     bin_width = page_width - (2 * margin_px)
     bin_height = page_height - (2 * margin_px)
@@ -610,9 +689,14 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
     packer = rectpack.newPacker(rotation=False)
     images = [d['img'] for d in image_data]
     
+    # Calculate extra height needed for object numbers placed below
+    extra_number_height = 0
+    if add_object_number and object_number_position == 'bottom_center':
+        extra_number_height = object_number_font_size + 10
+    
     # Map rectpack ID back to image_data index
     for i, img in enumerate(images):
-        packer.add_rect(img.width + spacing_px, img.height + spacing_px, rid=i)
+        packer.add_rect(img.width + spacing_px, img.height + spacing_px + extra_number_height, rid=i)
     
     # Add enough bins
     for _ in range(len(images)):
@@ -631,8 +715,26 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
         current_svg = SVGGenerator(page_width, page_height)
         current_svg.add_rect(0, 0, page_width, page_height, fill="white")
         
-        count = 0
+        # Prepare font
+        number_font = None
+        if add_object_number:
+            try: number_font = get_font(object_number_font_size)
+            except: number_font = ImageFont.load_default()
+            
+        # Collect all rects to sort them by position (reading order)
+        page_rects = []
         for rect in abin:
+            page_rects.append(rect)
+            
+        # Sort: Top to Bottom (y), then Left to Right (x)
+        # We use a threshold for Y to group into "rows" roughly, otherwise exact Y sort might be erratic with varied heights.
+        # But for puzzle, exact Y sort is probably fine or simple Y-major sort.
+        page_rects.sort(key=lambda r: (r.y, r.x))
+        
+        page_object_counter = 1
+        count = 0
+        
+        for rect in page_rects:
             img_idx = rect.rid
             placed_indices.add(img_idx)
             data = image_data[img_idx]
@@ -646,6 +748,33 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
             
             # 2. SVG
             _render_item_to_svg(current_svg, data, x, y)
+            
+            # 3. Object Numbering
+            if add_object_number:
+                num_str = str(page_object_counter)
+                page_object_counter += 1
+                
+                draw = ImageDraw.Draw(current_pil)
+                font_h = object_number_font_size
+                padding_num = 5
+                
+                if object_number_position == 'bottom_left':
+                    nx = x + 5
+                    ny = y + img.height - font_h - padding_num
+                    
+                    draw.text((nx, ny), num_str, font=number_font, fill="black")
+                    current_svg.add_text(num_str, nx, ny + font_h, font_h, font_family="Arial", anchor="start")
+                    
+                elif object_number_position == 'bottom_center':
+                    # Place BELOW the image block
+                    nx = x + (img.width // 2)
+                    ny = y + img.height + padding_num
+                    
+                    bbox = draw.textbbox((0,0), num_str, font=number_font)
+                    tw = bbox[2] - bbox[0]
+                    draw.text((nx - tw/2, ny), num_str, font=number_font, fill="black")
+                    current_svg.add_text(num_str, nx, ny + font_h, font_h, font_family="Arial", anchor="middle")
+
             count += 1
             
         pil_pages.append(current_pil)

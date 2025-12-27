@@ -9,10 +9,10 @@ let metadataHeaders = [];
 let imageUpload, metadataUpload, generateBtn, clearBtn, terminalOutput;
 let uploadStatus, metadataStatus, progressContainer, progressBar, progressText;
 let resultSection, previewSection, scaleDisplay, scaleFactor;
-let gridSettings, captionSettings, scaleBarSettings, tableNumberSettings;
+let gridSettings, captionSettings, scaleBarSettings, tableNumberSettings, objectNumberSettings;
 
 // Splash Screen
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Initialize DOM elements
     imageUpload = document.getElementById('imageUpload');
     metadataUpload = document.getElementById('metadataUpload');
@@ -32,13 +32,14 @@ document.addEventListener('DOMContentLoaded', function() {
     captionSettings = document.getElementById('captionSettings');
     scaleBarSettings = document.getElementById('scaleBarSettings');
     tableNumberSettings = document.getElementById('tableNumberSettings');
-    
+    objectNumberSettings = document.getElementById('objectNumberSettings');
+
     // Simulate loading process
     const splashScreen = document.getElementById('splash-screen');
     const splashProgressBar = document.getElementById('splash-progress-bar');
     const splashProgressText = document.getElementById('splash-progress-text');
     const splashMessage = document.getElementById('splash-message');
-    
+
     const loadingSteps = [
         { progress: 20, message: 'Loading components...' },
         { progress: 40, message: 'Initializing interface...' },
@@ -46,9 +47,9 @@ document.addEventListener('DOMContentLoaded', function() {
         { progress: 80, message: 'Preparing workspace...' },
         { progress: 100, message: 'Ready!' }
     ];
-    
+
     let currentStep = 0;
-    
+
     function updateSplash() {
         if (currentStep < loadingSteps.length) {
             const step = loadingSteps[currentStep];
@@ -71,10 +72,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 500);
         }
     }
-    
+
     // Start splash animation
     setTimeout(updateSplash, 100);
-    
+
     // Initialize app after splash - make sure DOM is ready
     setTimeout(() => {
         setupEventListeners();
@@ -88,58 +89,62 @@ function setupEventListeners() {
         console.error('Critical DOM elements not found!');
         return;
     }
-    
+
     // File uploads
     imageUpload.addEventListener('change', handleImageUpload);
     metadataUpload.addEventListener('change', handleMetadataUpload);
-    
+
     // Mode selection
     document.querySelectorAll('input[name="mode"]').forEach(radio => {
         radio.addEventListener('change', handleModeChange);
     });
-    
+
     // Checkboxes for showing/hiding sections
-    document.getElementById('addCaption').addEventListener('change', function() {
+    document.getElementById('addCaption').addEventListener('change', function () {
         captionSettings.style.display = this.checked ? 'block' : 'none';
     });
-    
-    document.getElementById('addScaleBar').addEventListener('change', function() {
+
+    document.getElementById('addScaleBar').addEventListener('change', function () {
         scaleBarSettings.style.display = this.checked ? 'block' : 'none';
     });
-    
-    document.getElementById('addTableNumber').addEventListener('change', function() {
+
+    document.getElementById('addTableNumber').addEventListener('change', function () {
         tableNumberSettings.style.display = this.checked ? 'block' : 'none';
     });
-    
+
+    document.getElementById('addObjectNumber').addEventListener('change', function () {
+        objectNumberSettings.style.display = this.checked ? 'block' : 'none';
+    });
+
     // Page break on primary change - show/hide options
-    document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', function() {
+    document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', function () {
         const primaryBreakOptions = document.getElementById('primaryBreakOptions');
         primaryBreakOptions.style.display = this.checked ? 'block' : 'none';
     });
-    
+
     // Primary break type - show/hide divider settings
     document.querySelectorAll('input[name="primaryBreakType"]').forEach(radio => {
-        radio.addEventListener('change', function() {
+        radio.addEventListener('change', function () {
             const dividerSettings = document.getElementById('dividerSettings');
             dividerSettings.style.display = (this.value === 'divider') ? 'block' : 'none';
         });
     });
-    
+
     // Scale factor slider
-    scaleFactor.addEventListener('input', function() {
+    scaleFactor.addEventListener('input', function () {
         scaleDisplay.textContent = parseFloat(this.value).toFixed(2) + 'x';
     });
-    
+
     // Sort by metadata
     document.getElementById('sortBy').addEventListener('change', updateSortOptions);
-    
+
     // Metadata upload triggers sort option update
     metadataUpload.addEventListener('change', updateSortOptions);
-    
+
     // Buttons
     generateBtn.addEventListener('click', handleGenerate);
     clearBtn.addEventListener('click', handleClear);
-    
+
     // Auto-update preview when settings change
     setupPreviewAutoUpdate();
 }
@@ -149,18 +154,18 @@ function setupPreviewAutoUpdate() {
     let previewTimeout;
     function schedulePreviewUpdate() {
         if (!uploadedImages) return;
-        
+
         clearTimeout(previewTimeout);
         previewTimeout = setTimeout(() => {
             generateLayoutPreview();
         }, 500); // Wait 500ms after last change
     }
-    
+
     // Listen to all settings that affect layout
     document.querySelectorAll('input[name="mode"]').forEach(radio => {
         radio.addEventListener('change', schedulePreviewUpdate);
     });
-    
+
     document.getElementById('pageSize').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('scaleFactor').addEventListener('input', schedulePreviewUpdate);
     document.getElementById('marginPx').addEventListener('input', schedulePreviewUpdate);
@@ -174,7 +179,10 @@ function setupPreviewAutoUpdate() {
     document.getElementById('verticalAlignment').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('dividerThickness').addEventListener('input', schedulePreviewUpdate);
     document.getElementById('dividerWidth').addEventListener('input', schedulePreviewUpdate);
-    
+    document.getElementById('addObjectNumber').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('objectNumberPosition').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('objectNumberFontSize').addEventListener('input', schedulePreviewUpdate);
+
     // Listen to primary break type radio buttons
     document.querySelectorAll('input[name="primaryBreakType"]').forEach(radio => {
         radio.addEventListener('change', schedulePreviewUpdate);
@@ -190,42 +198,42 @@ function handleModeChange(e) {
 async function handleImageUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    
+
     logTerminal(`Ready to process images...`, 'info');
     logTerminal(`Uploading ${files.length} images...`, 'info');
-    
+
     // Upload in batches of 100 images to avoid payload size issues
     const BATCH_SIZE = 100;
     const totalFiles = files.length;
     const filesArray = Array.from(files);
     let uploadedCount = 0;
     let allErrors = [];
-    
+
     try {
         // Upload in batches
         for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
             const batch = filesArray.slice(i, Math.min(i + BATCH_SIZE, totalFiles));
             const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
             const totalBatches = Math.ceil(totalFiles / BATCH_SIZE);
-            
+
             showProgress(`Uploading batch ${batchNumber}/${totalBatches} (${batch.length} images)...`);
             logTerminal(`Batch ${batchNumber}/${totalBatches}: ${batch.length} images`, 'info');
-            
+
             const formData = new FormData();
             // Add flag to indicate if this is the first batch (should clear folder)
             formData.append('is_first_batch', i === 0 ? 'true' : 'false');
-            
+
             for (let file of batch) {
                 formData.append('images', file);
             }
-            
+
             const response = await fetch('/api/upload-images', {
                 method: 'POST',
                 body: formData
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 uploadedCount += data.uploaded;
                 if (data.errors && data.errors.length > 0) {
@@ -235,23 +243,23 @@ async function handleImageUpload(e) {
                 throw new Error(data.error || 'Upload failed');
             }
         }
-        
+
         // All batches uploaded successfully
         uploadedImages = true;
         uploadStatus.innerHTML = `<span class="upload-success"><i class="bi bi-check-circle"></i> ${uploadedCount} images uploaded</span>`;
         logTerminal(`Successfully uploaded ${uploadedCount} images`, 'success');
-        
+
         if (allErrors.length > 0) {
             allErrors.forEach(err => logTerminal(err, 'warning'));
         }
-        
+
     } catch (error) {
         uploadStatus.innerHTML = `<span class="upload-error"><i class="bi bi-x-circle"></i> Upload error</span>`;
         logTerminal(`Error: ${error.message}`, 'error');
     } finally {
         hideProgress();
         updateUIState();
-        
+
         // Generate preview after upload
         if (uploadedImages) {
             generateLayoutPreview();
@@ -262,21 +270,21 @@ async function handleImageUpload(e) {
 async function generateLayoutPreview() {
     const previewSection = document.getElementById('previewSection');
     const previewGrid = document.getElementById('previewGrid');
-    
+
     if (!uploadedImages) {
         previewSection.style.display = 'none';
         return;
     }
-    
+
     try {
         logTerminal('Generating layout preview...', 'info');
-        
+
         // Collect selected metadata fields
         const selectedMetadataFields = [];
         document.querySelectorAll('#metadataFieldsCheckboxes input[type="checkbox"]:checked').forEach(cb => {
             selectedMetadataFields.push(cb.value);
         });
-        
+
         // Collect current settings
         const settings = {
             mode: document.querySelector('input[name="mode"]:checked').value,
@@ -308,9 +316,12 @@ async function generateLayoutPreview() {
             primaryBreakType: document.querySelector('input[name="primaryBreakType"]:checked')?.value || 'new_page',
             dividerThickness: parseInt(document.getElementById('dividerThickness').value) || 5,
             dividerWidth: parseInt(document.getElementById('dividerWidth').value) || 80,
-            verticalAlignment: document.getElementById('verticalAlignment').value
+            verticalAlignment: document.getElementById('verticalAlignment').value,
+            addObjectNumber: document.getElementById('addObjectNumber').checked,
+            objectNumberPosition: document.getElementById('objectNumberPosition').value,
+            objectNumberFontSize: parseInt(document.getElementById('objectNumberFontSize').value) || 18
         };
-        
+
         const response = await fetch('/api/preview', {
             method: 'POST',
             headers: {
@@ -318,13 +329,13 @@ async function generateLayoutPreview() {
             },
             body: JSON.stringify(settings)
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             // Display only the first preview image with elegant paper design
             const firstPreviewUrl = data.preview_urls[0];
-            
+
             // Build preview badges
             let limitedWarning = '';
             if (data.is_preview_limited) {
@@ -335,7 +346,7 @@ async function generateLayoutPreview() {
                     </div>
                 `;
             }
-            
+
             previewGrid.innerHTML = `
                 <div class="preview-layout-single fade-in">
                     ${limitedWarning}
@@ -359,7 +370,7 @@ async function generateLayoutPreview() {
                 </div>
             `;
             previewSection.style.display = 'block';
-            
+
             if (data.is_preview_limited) {
                 logTerminal(`Preview generated (limited to ${data.total_images}/${data.total_images_in_dataset} images): ${data.total_pages} page(s)`, 'warning');
             } else {
@@ -368,7 +379,7 @@ async function generateLayoutPreview() {
         } else {
             throw new Error(data.error || 'Preview generation failed');
         }
-        
+
     } catch (error) {
         logTerminal(`Preview error: ${error.message}`, 'error');
         previewSection.style.display = 'none';
@@ -378,21 +389,21 @@ async function generateLayoutPreview() {
 async function handleMetadataUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     logTerminal(`Uploading metadata file: ${file.name}`, 'info');
     showProgress('Uploading metadata...');
-    
+
     const formData = new FormData();
     formData.append('metadata', file);
-    
+
     try {
         const response = await fetch('/api/upload-metadata', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             uploadedMetadata = true;
             metadataHeaders = data.headers || [];
@@ -418,17 +429,17 @@ async function handleGenerate() {
         logTerminal('Please upload images first!', 'error');
         return;
     }
-    
+
     logTerminal('Starting layout generation...', 'info');
     showProgress('Generating layout...');
     resultSection.style.display = 'none';
-    
+
     // Collect selected metadata fields
     const selectedMetadataFields = [];
     document.querySelectorAll('#metadataFieldsCheckboxes input[type="checkbox"]:checked').forEach(cb => {
         selectedMetadataFields.push(cb.value);
     });
-    
+
     // Collect all settings
     const settings = {
         mode: document.querySelector('input[name="mode"]:checked').value,
@@ -460,11 +471,14 @@ async function handleGenerate() {
         primary_break_type: document.querySelector('input[name="primaryBreakType"]:checked')?.value || 'new_page',
         divider_thickness: parseInt(document.getElementById('dividerThickness').value) || 5,
         divider_width: parseInt(document.getElementById('dividerWidth').value) || 80,
-        vertical_alignment: document.getElementById('verticalAlignment').value
+        vertical_alignment: document.getElementById('verticalAlignment').value,
+        add_object_number: document.getElementById('addObjectNumber').checked,
+        object_number_position: document.getElementById('objectNumberPosition').value,
+        object_number_font_size: parseInt(document.getElementById('objectNumberFontSize').value) || 18
     };
-    
+
     logTerminal(`Settings: ${JSON.stringify(settings, null, 2)}`, 'info');
-    
+
     try {
         const response = await fetch('/api/generate', {
             method: 'POST',
@@ -473,14 +487,14 @@ async function handleGenerate() {
             },
             body: JSON.stringify(settings)
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             logTerminal(`✓ Layout generated successfully!`, 'success');
             logTerminal(`  File: ${data.filename}`, 'success');
             logTerminal(`  Pages: ${data.pages}`, 'success');
-            
+
             // Show download section
             document.getElementById('resultFilename').textContent = data.filename;
             document.getElementById('resultPages').textContent = data.pages;
@@ -501,14 +515,14 @@ async function handleClear() {
     if (!confirm('Clear all uploaded files and reset settings?')) {
         return;
     }
-    
+
     logTerminal('Clearing session...', 'info');
-    
+
     try {
         await fetch('/api/clear-session', {
             method: 'POST'
         });
-        
+
         // Reset form
         imageUpload.value = '';
         metadataUpload.value = '';
@@ -516,20 +530,20 @@ async function handleClear() {
         metadataStatus.innerHTML = '';
         resultSection.style.display = 'none';
         previewSection.style.display = 'none';
-        
+
         // Clear preview grid
         const previewGrid = document.getElementById('previewGrid');
         if (previewGrid) {
             previewGrid.innerHTML = '';
         }
-        
+
         uploadedImages = false;
         uploadedMetadata = false;
         metadataHeaders = [];
-        
+
         // Clear terminal
         terminalOutput.innerHTML = '<p class="text-success">Ready to process images...</p>';
-        
+
         updateUIState();
         logTerminal('Session cleared', 'success');
     } catch (error) {
@@ -540,54 +554,54 @@ async function handleClear() {
 function updateSortOptions() {
     const sortBy = document.getElementById('sortBy');
     const currentValue = sortBy.value;
-    
+
     // Clear current options
     sortBy.innerHTML = `
         <option value="alphabetical">Alphabetical</option>
         <option value="natural_name">Natural</option>
         <option value="random">Random</option>
     `;
-    
+
     // Add metadata headers as options
     if (metadataHeaders.length > 0) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = 'Metadata Fields';
-        
+
         metadataHeaders.forEach(header => {
             const option = document.createElement('option');
             option.value = header;
             option.textContent = header;
             optgroup.appendChild(option);
         });
-        
+
         sortBy.appendChild(optgroup);
     }
-    
+
     // Restore previous value if still valid
     const options = Array.from(sortBy.options).map(opt => opt.value);
     if (options.includes(currentValue)) {
         sortBy.value = currentValue;
     }
-    
+
     // Update secondary sort options
     const sortBySecondary = document.getElementById('sortBySecondary');
     const currentSecondary = sortBySecondary.value;
-    
+
     sortBySecondary.innerHTML = '<option value="none">None</option>';
-    
+
     if (metadataHeaders.length > 0) {
         sortBySecondary.innerHTML += `
             <option value="alphabetical">Alphabetical</option>
             <option value="natural_name">Natural</option>
         `;
-        
+
         metadataHeaders.forEach(header => {
             if (header !== currentValue) {  // Don't include current primary sort
                 sortBySecondary.innerHTML += `<option value="${header}">${header}</option>`;
             }
         });
     }
-    
+
     if (currentSecondary !== 'none') {
         sortBySecondary.value = currentSecondary;
     }
@@ -595,29 +609,29 @@ function updateSortOptions() {
 
 function updateMetadataFieldCheckboxes() {
     const container = document.getElementById('metadataFieldsCheckboxes');
-    
+
     if (metadataHeaders.length === 0) {
         container.innerHTML = '<em class="text-muted">Upload metadata to see options</em>';
         return;
     }
-    
+
     container.innerHTML = '';
     metadataHeaders.forEach(header => {
         const div = document.createElement('div');
         div.className = 'form-check';
-        
+
         const checkbox = document.createElement('input');
         checkbox.className = 'form-check-input';
         checkbox.type = 'checkbox';
         checkbox.id = `metaField_${header}`;
         checkbox.value = header;
         checkbox.checked = true; // Default to showing all fields
-        
+
         const label = document.createElement('label');
         label.className = 'form-check-label';
         label.htmlFor = `metaField_${header}`;
         label.textContent = header;
-        
+
         div.appendChild(checkbox);
         div.appendChild(label);
         container.appendChild(div);
@@ -643,8 +657,8 @@ function hideProgress() {
 
 function logTerminal(message, type = 'info') {
     const p = document.createElement('p');
-    
-    switch(type) {
+
+    switch (type) {
         case 'success':
             p.className = 'text-success';
             break;
@@ -659,10 +673,10 @@ function logTerminal(message, type = 'info') {
             p.className = 'text-info';
             break;
     }
-    
+
     const timestamp = new Date().toLocaleTimeString();
     p.textContent = `[${timestamp}] ${message}`;
-    
+
     terminalOutput.appendChild(p);
     terminalOutput.scrollTop = terminalOutput.scrollHeight;
 }
@@ -674,41 +688,41 @@ if (dropZone) {
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
     });
-    
+
     function preventDefaults(e) {
         e.preventDefault();
         e.stopPropagation();
     }
-    
+
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, highlight, false);
     });
-    
+
     ['dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, unhighlight, false);
     });
-    
+
     function highlight(e) {
         dropZone.classList.add('border-primary');
     }
-    
+
     function unhighlight(e) {
         dropZone.classList.remove('border-primary');
     }
-    
+
     dropZone.addEventListener('drop', handleDrop, false);
-    
+
     function handleDrop(e) {
         const dt = e.dataTransfer;
         const files = dt.files;
-        
+
         if (files.length > 0) {
             // Check if files are images
             const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-            
+
             if (imageFiles.length > 0) {
                 imageUpload.files = dt.files;
-                handleImageUpload({ target: { files: dt.files }});
+                handleImageUpload({ target: { files: dt.files } });
             }
         }
     }
@@ -719,10 +733,10 @@ function openPreviewModal(imageUrl, pageNumber) {
     const modal = document.getElementById('previewModal');
     const modalImg = document.getElementById('modalPreviewImage');
     const caption = document.getElementById('previewModalCaption');
-    
+
     modalImg.src = imageUrl + '?t=' + new Date().getTime();
     caption.textContent = `Preview - Page ${pageNumber}`;
-    
+
     const bsModal = new bootstrap.Modal(modal);
     bsModal.show();
 }

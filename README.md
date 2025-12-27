@@ -22,6 +22,9 @@ Your support helps maintain and improve this open-source tool for the archaeolog
 
 </div>
 
+---
+
+
 ## Introduction
 
 Producing publication-quality catalogues of archaeological artefacts is often a time-consuming process, requiring both precision in presentation and consistency across large datasets. **PyPotteryLayout** is designed to streamline this workflow by combining automation with professional publishing standards.
@@ -189,7 +192,7 @@ The build script automatically:
 
 ## 📊 Recent Updates
 
-### v0.3.0
+### v0.3.1
 
 - **New features**:
   - Improved SVG export
