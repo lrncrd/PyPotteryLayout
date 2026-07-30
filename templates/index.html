@@ -10,10 +10,25 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Display font for headings (pairs with Bootstrap's default body font;
+         same family used by the PyPottery Suite launcher for brand consistency) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ version }}">
 
     <style>
+        /* Display font for headings - pairs with Bootstrap's default body font
+           so hierarchy comes from typeface contrast, not just size/weight */
+        .splash-title,
+        .app-header h1,
+        #infoModal .modal-body h2 {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
         /* Splash Screen Styles */
         .splash-screen {
             position: fixed;
@@ -273,10 +288,6 @@
                     data-bs-target="#infoModal">
                     <i class="bi bi-info-circle"></i> Info
                 </button>
-                <a href="https://github.com/lrncrd/PyPotteryLayout" target="_blank"
-                    class="btn btn-outline-light btn-sm">
-                    <i class="bi bi-github"></i> GitHub
-                </a>
             </div>
         </header>
 
@@ -300,296 +311,420 @@
 
             <div class="tab-content border border-top-0 p-3 bg-white" id="settingsTabContent">
                 <!-- BASIC TAB -->
-                <div class="tab-pane fade show active" id="basic" role="tabpanel">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h5 class="mb-3"><i class="bi bi-folder"></i> Input Files</h5>
+                <div class="tab-pane fade show active p-3 p-md-4" id="basic" role="tabpanel">
+                    <div class="row g-4">
+                        <!-- Input Files Column -->
+                        <div class="col-lg-6">
+                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                                    <div class="icon-shape bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-folder-fill fs-6"></i>
+                                    </div>
+                                    <h5 class="mb-0 fw-bold text-dark">Input Files</h5>
+                                </div>
 
-                            <div class="mb-3">
-                                <label for="imageUpload" class="form-label">Images</label>
-                                <input type="file" class="form-control" id="imageUpload" multiple accept="image/*">
-                                <div id="uploadStatus" class="mt-2"></div>
-                            </div>
+                                <!-- Images Upload Box -->
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label for="imageUpload" class="form-label fw-semibold text-dark mb-0">
+                                            <i class="bi bi-images text-primary me-1"></i> Images
+                                        </label>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">PNG, JPG, TIF, BMP</span>
+                                    </div>
+                                    <div class="file-upload-box p-3 border rounded-3 bg-white shadow-xs text-center position-relative">
+                                        <input type="file" class="form-control file-input-overlay position-absolute top-0 start-0 w-100 h-100 opacity-0" id="imageUpload" multiple accept="image/*" style="cursor: pointer; z-index: 5;">
+                                        <div class="upload-box-content py-2">
+                                            <div class="upload-icon-wrapper mb-2">
+                                                <i class="bi bi-cloud-arrow-up fs-2 text-primary"></i>
+                                            </div>
+                                            <div class="fw-semibold text-dark">Choose images or drag & drop</div>
+                                            <div class="small text-muted">Supports bulk image loading</div>
+                                        </div>
+                                    </div>
+                                    <div id="uploadStatus" class="mt-2"></div>
+                                </div>
 
-                            <div class="mb-3">
-                                <label for="metadataUpload" class="form-label">Metadata (Optional)</label>
-                                <input type="file" class="form-control" id="metadataUpload" accept=".xlsx,.csv">
-                                <div id="metadataStatus" class="mt-2"></div>
+                                <!-- Metadata Upload Box -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label for="metadataUpload" class="form-label fw-semibold text-dark mb-0">
+                                            <i class="bi bi-file-earmark-spreadsheet text-success me-1"></i> Metadata <span class="text-muted fw-normal fs-7">(Optional)</span>
+                                        </label>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">XLSX, CSV</span>
+                                    </div>
+                                    <div class="file-upload-box p-3 border rounded-3 bg-white shadow-xs text-center position-relative">
+                                        <input type="file" class="form-control file-input-overlay position-absolute top-0 start-0 w-100 h-100 opacity-0" id="metadataUpload" accept=".xlsx,.csv" style="cursor: pointer; z-index: 5;">
+                                        <div class="upload-box-content py-2">
+                                            <div class="upload-icon-wrapper mb-2">
+                                                <i class="bi bi-file-earmark-arrow-up fs-2 text-success"></i>
+                                            </div>
+                                            <div class="fw-semibold text-dark">Choose Excel / CSV file</div>
+                                            <div class="small text-muted">For automated catalog sorting & captions</div>
+                                        </div>
+                                    </div>
+                                    <div id="metadataStatus" class="mt-2"></div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="col-md-6">
-                            <h5 class="mb-3"><i class="bi bi-grid"></i> Layout</h5>
-
-                            <div class="mb-3">
-                                <label class="form-label">Mode</label>
-                                <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="mode" id="modeGrid" value="grid"
-                                        checked>
-                                    <label class="btn btn-outline-primary" for="modeGrid">Grid</label>
-                                    <input type="radio" class="btn-check" name="mode" id="modePuzzle" value="puzzle">
-                                    <label class="btn btn-outline-primary" for="modePuzzle">Puzzle</label>
-                                </div>
-                            </div>
-
-                            <div class="row">
-                                <div class="col-6 mb-3">
-                                    <label for="pageSize" class="form-label">Page Size</label>
-                                    <select class="form-select" id="pageSize">
-                                        <option value="A4" selected>A4</option>
-                                        <option value="A3">A3</option>
-                                        <option value="LETTER">Letter</option>
-                                        <option value="HD">HD (1920x1080)</option>
-                                        <option value="4K">4K (3840x2160)</option>
-                                    </select>
-                                </div>
-                                <div class="col-6 mb-3">
-                                    <label for="exportFormat" class="form-label">Export</label>
-                                    <select class="form-select" id="exportFormat">
-                                        <option value="PDF" selected>PDF</option>
-                                        <option value="SVG">SVG</option>
-                                        <option value="JPG">JPG</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div id="gridSettings">
-                                <div class="row">
-                                    <div class="col-6 mb-3">
-                                        <label for="gridRows" class="form-label">Rows</label>
-                                        <input type="number" class="form-control" id="gridRows" value="4" min="1"
-                                            max="10">
+                        <!-- Layout Settings Column -->
+                        <div class="col-lg-6">
+                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                                    <div class="icon-shape bg-indigo text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; background-color: #667eea;">
+                                        <i class="bi bi-grid-3x3-gap-fill fs-6"></i>
                                     </div>
-                                    <div class="col-6 mb-3">
-                                        <label for="gridCols" class="form-label">Columns</label>
-                                        <input type="number" class="form-control" id="gridCols" value="3" min="1"
-                                            max="10">
+                                    <h5 class="mb-0 fw-bold text-dark">Layout Configuration</h5>
+                                </div>
+
+                                <!-- Mode Selection (Grid vs Puzzle) -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold text-dark mb-2">
+                                        <i class="bi bi-diagram-3 text-secondary me-1"></i> Layout Mode
+                                    </label>
+                                    <div class="mode-segmented-control d-flex p-1 bg-white border rounded-3 shadow-xs">
+                                        <input type="radio" class="btn-check" name="mode" id="modeGrid" value="grid" checked>
+                                        <label class="mode-segment-btn flex-fill text-center py-2 px-3 rounded-2 fw-semibold" for="modeGrid">
+                                            <i class="bi bi-grid-3x3 me-1"></i> Grid Mode
+                                        </label>
+                                        <input type="radio" class="btn-check" name="mode" id="modePuzzle" value="puzzle">
+                                        <label class="mode-segment-btn flex-fill text-center py-2 px-3 rounded-2 fw-semibold" for="modePuzzle">
+                                            <i class="bi bi-puzzle me-1"></i> Puzzle Mode
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Page Size & Export Format -->
+                                <div class="row g-3 mb-3">
+                                    <div class="col-6">
+                                        <label for="pageSize" class="form-label fw-semibold text-dark mb-1">
+                                            <i class="bi bi-aspect-ratio me-1 text-muted"></i> Page Size
+                                        </label>
+                                        <select class="form-select border-secondary-subtle shadow-xs" id="pageSize">
+                                            <option value="A4" selected>A4 (Standard)</option>
+                                            <option value="A3">A3 (Large)</option>
+                                            <option value="LETTER">Letter</option>
+                                            <option value="HD">HD (1920x1080)</option>
+                                            <option value="4K">4K (3840x2160)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="exportFormat" class="form-label fw-semibold text-dark mb-1">
+                                            <i class="bi bi-filetype-pdf me-1 text-muted"></i> Export Format
+                                        </label>
+                                        <select class="form-select border-secondary-subtle shadow-xs" id="exportFormat">
+                                            <option value="PDF" selected>PDF Document</option>
+                                            <option value="SVG">SVG Vector</option>
+                                            <option value="JPG">JPG Images</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Grid Rows & Columns -->
+                                <div id="gridSettings" class="p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="small fw-semibold text-uppercase text-muted mb-2 tracking-wide" style="font-size: 0.75rem; letter-spacing: 0.05em;">Grid Dimensions</div>
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <label for="gridRows" class="form-label fw-medium text-dark mb-1">Rows per page</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light border-secondary-subtle"><i class="bi bi-border-bottom"></i></span>
+                                                <input type="number" class="form-control border-secondary-subtle" id="gridRows" value="4" min="1" max="10">
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="gridCols" class="form-label fw-medium text-dark mb-1">Cols per page</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light border-secondary-subtle"><i class="bi bi-border-right"></i></span>
+                                                <input type="number" class="form-control border-secondary-subtle" id="gridCols" value="3" min="1" max="10">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="row mt-3">
-                        <div class="col-12 text-center">
-                            <button class="btn btn-success btn-lg px-5" id="generateBtn" disabled>
-                                <i class="bi bi-play-circle"></i> Generate Layout
-                            </button>
-                            <button class="btn btn-outline-secondary ms-2" id="clearBtn">
-                                <i class="bi bi-trash"></i> Clear All
-                            </button>
-                        </div>
+                    <!-- Action Bar Container -->
+                    <div class="action-bar-container mt-4 pt-3 border-top d-flex flex-wrap justify-content-center align-items-center gap-3">
+                        <button class="btn btn-generate-primary btn-lg px-5 py-2-5 shadow-md fw-bold d-inline-flex align-items-center gap-2" id="generateBtn" disabled>
+                            <i class="bi bi-play-fill fs-5"></i>
+                            <span>Generate Layout</span>
+                        </button>
+                        <button class="btn btn-outline-danger px-4 py-2 d-inline-flex align-items-center gap-2 rounded-3" id="clearBtn">
+                            <i class="bi bi-trash3"></i>
+                            <span>Clear All</span>
+                        </button>
                     </div>
                 </div>
 
                 <!-- ADVANCED TAB -->
-                <div class="tab-pane fade" id="advanced" role="tabpanel">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <h6><i class="bi bi-rulers"></i> Dimensions</h6>
-                            <div class="mb-3">
-                                <label for="scaleFactor" class="form-label">
-                                    Scale: <span id="scaleDisplay">0.40x</span>
-                                </label>
-                                <input type="range" class="form-range" id="scaleFactor" min="0.1" max="2.0" step="0.05"
-                                    value="0.4">
-                            </div>
-                            <div class="row">
-                                <div class="col-6 mb-3">
-                                    <label for="marginPx" class="form-label">Margin</label>
-                                    <input type="number" class="form-control form-control-sm" id="marginPx" value="50"
-                                        min="0">
+                <div class="tab-pane fade p-3 p-md-4" id="advanced" role="tabpanel">
+                    <div class="row g-4">
+                        <!-- Column 1: Dimensions & Spacing -->
+                        <div class="col-lg-4 col-md-6">
+                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                                    <div class="icon-shape bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-rulers fs-6"></i>
+                                    </div>
+                                    <h5 class="mb-0 fw-bold text-dark">Dimensions</h5>
                                 </div>
-                                <div class="col-6 mb-3">
-                                    <label for="spacingPx" class="form-label">Spacing</label>
-                                    <input type="number" class="form-control form-control-sm" id="spacingPx" value="10"
-                                        min="0">
+
+                                <!-- Scale Controls -->
+                                <div class="mb-4 p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label class="form-label fw-semibold text-dark mb-0">Image Scale</label>
+                                        <div class="btn-group btn-group-sm" role="group" aria-label="Scale input mode">
+                                            <input type="radio" class="btn-check" name="scaleInputMode" id="scaleModeDecimal" value="decimal" checked>
+                                            <label class="btn btn-outline-secondary py-0 px-2" for="scaleModeDecimal">Decimal</label>
+                                            <input type="radio" class="btn-check" name="scaleInputMode" id="scaleModeRatio" value="ratio">
+                                            <label class="btn btn-outline-secondary py-0 px-2" for="scaleModeRatio">Ratio (1:N)</label>
+                                        </div>
+                                    </div>
+
+                                    <div id="scaleDecimalMode" class="mt-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1 fs-7">
+                                            <span class="text-muted">Scale Factor</span>
+                                            <span class="fw-bold text-primary" id="scaleDisplay">0.40x</span>
+                                        </div>
+                                        <input type="range" class="form-range custom-slider" id="scaleFactor" min="0.1" max="2.0" step="0.05" value="0.4">
+                                    </div>
+
+                                    <div id="scaleRatioMode" class="mt-2 d-flex align-items-center gap-2" style="display: none !important;">
+                                        <input type="number" class="form-control form-control-sm text-center" id="scaleRatioA" value="1" min="0.01" step="0.1" style="width: 65px;">
+                                        <span class="fw-bold text-muted">:</span>
+                                        <input type="number" class="form-control form-control-sm text-center" id="scaleRatioB" value="2" min="0.01" step="0.1" style="width: 65px;">
+                                        <span class="form-text ms-1 text-nowrap">= <span id="scaleRatioDisplay" class="fw-bold text-primary">0.50x</span></span>
+                                    </div>
                                 </div>
-                                <div class="col-12 mb-2">
-                                    <label for="verticalAlignment" class="form-label">Vertical Alignment</label>
-                                    <select class="form-select form-select-sm" id="verticalAlignment">
+
+                                <!-- Margins & Spacing -->
+                                <div class="row g-3 mb-3">
+                                    <div class="col-6">
+                                        <label for="marginPx" class="form-label fw-semibold text-dark mb-1">
+                                            <i class="bi bi-bounding-box-circles me-1 text-muted"></i> Margin (px)
+                                        </label>
+                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="marginPx" value="50" min="0">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="spacingPx" class="form-label fw-semibold text-dark mb-1">
+                                            <i class="bi bi-arrows-angle-expand me-1 text-muted"></i> Spacing (px)
+                                        </label>
+                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="spacingPx" value="10" min="0">
+                                    </div>
+                                </div>
+
+                                <!-- Vertical Alignment & Margin Border -->
+                                <div class="mb-3">
+                                    <label for="verticalAlignment" class="form-label fw-semibold text-dark mb-1">
+                                        <i class="bi bi-align-middle me-1 text-muted"></i> Vertical Alignment
+                                    </label>
+                                    <select class="form-select border-secondary-subtle shadow-xs" id="verticalAlignment">
                                         <option value="center" selected>Center (default)</option>
                                         <option value="top">Top</option>
                                     </select>
                                 </div>
-                                <div class="col-12">
-                                    <div class="form-check">
+
+                                <div class="p-2.5 bg-white border rounded-3 shadow-xs">
+                                    <div class="form-check form-switch mb-0">
                                         <input class="form-check-input" type="checkbox" id="showMarginBorder">
-                                        <label class="form-check-label" for="showMarginBorder">Show Margin
-                                            Border</label>
+                                        <label class="form-check-label fw-medium text-dark ms-1" for="showMarginBorder">Show Margin Border</label>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="col-md-4">
-                            <h6><i class="bi bi-fonts"></i> Captions & Sorting</h6>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="addCaption" checked>
-                                <label class="form-check-label" for="addCaption">Enable Captions</label>
-                            </div>
-                            <div id="captionSettings">
-                                <div class="row">
-                                    <div class="col-6 mb-3">
-                                        <label for="captionFontSize" class="form-label">Font Size</label>
-                                        <input type="number" class="form-control form-control-sm" id="captionFontSize"
-                                            value="12" min="6">
+                        <!-- Column 2: Captions & Sorting -->
+                        <div class="col-lg-4 col-md-6">
+                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                                    <div class="icon-shape bg-info text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-fonts fs-6"></i>
                                     </div>
-                                    <div class="col-6 mb-3">
-                                        <label for="captionPadding" class="form-label">Padding</label>
-                                        <input type="number" class="form-control form-control-sm" id="captionPadding"
-                                            value="5" min="0">
-                                    </div>
+                                    <h5 class="mb-0 fw-bold text-dark">Captions & Sorting</h5>
                                 </div>
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" id="removeExtension">
-                                    <label class="form-check-label" for="removeExtension">Remove file extension</label>
-                                </div>
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" id="hideFieldNames">
-                                    <label class="form-check-label" for="hideFieldNames">Hide field names (show only
-                                        values)</label>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">Include Metadata Fields:</label>
-                                    <div id="metadataFieldsCheckboxes" class="small">
-                                        <em class="text-muted">Upload metadata to see options</em>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <hr class="my-3">
+                                <!-- Enable Captions Switch -->
+                                <div class="mb-3 p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="addCaption" checked>
+                                        <label class="form-check-label fw-bold text-dark ms-1" for="addCaption">Enable Captions</label>
+                                    </div>
+                                    <div id="captionSettings" class="pt-2 border-top mt-2">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <label for="captionFontSize" class="form-label small text-muted mb-1">Font Size (pt)</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="captionFontSize" value="12" min="6">
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="captionPadding" class="form-label small text-muted mb-1">Padding (px)</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="captionPadding" value="5" min="0">
+                                            </div>
+                                        </div>
+                                        <div class="form-check small mb-1">
+                                            <input class="form-check-input" type="checkbox" id="removeExtension">
+                                            <label class="form-check-label text-dark" for="removeExtension">Remove file extension</label>
+                                        </div>
+                                        <div class="form-check small mb-2">
+                                            <input class="form-check-input" type="checkbox" id="hideFieldNames">
+                                            <label class="form-check-label text-dark" for="hideFieldNames">Hide field names (show values only)</label>
+                                        </div>
+                                        <div class="mt-2 pt-2 border-top">
+                                            <div class="small fw-semibold text-dark mb-1">Metadata Fields:</div>
+                                            <div id="metadataFieldsCheckboxes" class="small bg-light p-2 rounded border">
+                                                <em class="text-muted fs-8">Upload metadata file to select fields</em>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
-                            <!-- Object Numbering -->
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="addObjectNumber">
-                                <label class="form-check-label" for="addObjectNumber">Add object number (1, 2,
-                                    3...)</label>
-                            </div>
-                            <div id="objectNumberSettings" style="display: none;">
-                                <div class="row">
-                                    <div class="col-6 mb-3">
-                                        <label for="objectNumberPosition" class="form-label">Position</label>
-                                        <select class="form-select form-select-sm" id="objectNumberPosition">
-                                            <option value="bottom_center" selected>Below (Centered)</option>
-                                            <option value="bottom_left">Bottom Left</option>
+                                <!-- Object Numbering -->
+                                <div class="mb-3 p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" id="addObjectNumber">
+                                        <label class="form-check-label fw-bold text-dark ms-1" for="addObjectNumber">Add Object Number (1, 2...)</label>
+                                    </div>
+                                    <div id="objectNumberSettings" style="display: none;" class="pt-2 border-top mt-2">
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <label for="objectNumberPosition" class="form-label small text-muted mb-1">Position</label>
+                                                <select class="form-select form-select-sm border-secondary-subtle" id="objectNumberPosition">
+                                                    <option value="bottom_center" selected>Below (Center)</option>
+                                                    <option value="bottom_left">Bottom Left</option>
+                                                    <option value="bottom_right">Bottom Right</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="objectNumberFontSize" class="form-label small text-muted mb-1">Font Size</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="objectNumberFontSize" value="18" min="8" max="72">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Sorting Controls -->
+                                <div class="p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="mb-2">
+                                        <label for="sortBy" class="form-label fw-semibold text-dark mb-1">Primary Sort</label>
+                                        <select class="form-select form-select-sm border-secondary-subtle" id="sortBy">
+                                            <option value="alphabetical" selected>Alphabetical</option>
+                                            <option value="natural">Natural</option>
+                                            <option value="random">Random</option>
                                         </select>
                                     </div>
-                                    <div class="col-6 mb-3">
-                                        <label for="objectNumberFontSize" class="form-label">Font Size</label>
-                                        <input type="number" class="form-control form-control-sm"
-                                            id="objectNumberFontSize" value="18" min="8" max="72">
-                                    </div>
-                                </div>
-                            </div>
 
-                            <div class="mb-3">
-                                <label for="sortBy" class="form-label">Primary Sort</label>
-                                <select class="form-select form-select-sm" id="sortBy">
-                                    <option value="alphabetical" selected>Alphabetical</option>
-                                    <option value="natural">Natural</option>
-                                    <option value="random">Random</option>
-                                </select>
-                            </div>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="pageBreakOnPrimaryChange">
-                                <label class="form-check-label" for="pageBreakOnPrimaryChange">
-                                    Enable primary sort grouping
-                                </label>
-                            </div>
-                            <div id="primaryBreakOptions"
-                                style="display: none; margin-left: 20px; margin-bottom: 10px;">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="primaryBreakType"
-                                        id="breakTypeNewPage" value="new_page" checked>
-                                    <label class="form-check-label" for="breakTypeNewPage">
-                                        New page
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="primaryBreakType"
-                                        id="breakTypeDivider" value="divider">
-                                    <label class="form-check-label" for="breakTypeDivider">
-                                        Horizontal divider line
-                                    </label>
-                                </div>
-                                <div id="dividerSettings" style="display: none; margin-top: 10px;">
-                                    <div class="row">
-                                        <div class="col-6">
-                                            <label for="dividerThickness" class="form-label"
-                                                style="font-size: 0.85rem;">Thickness (px)</label>
-                                            <input type="number" class="form-control form-control-sm"
-                                                id="dividerThickness" value="5" min="1" max="20">
+                                    <div class="form-check small mb-2">
+                                        <input class="form-check-input" type="checkbox" id="showPrimarySortHeader">
+                                        <label class="form-check-label text-dark" for="showPrimarySortHeader">
+                                            Show sort value as chapter title
+                                        </label>
+                                    </div>
+                                    <div id="sortHeaderOptions" style="display: none;" class="ms-3 mb-2 p-2 bg-light rounded border">
+                                        <label for="sortHeaderFontSize" class="form-label small text-muted mb-1">Title Font Size</label>
+                                        <input type="number" class="form-control form-control-sm border-secondary-subtle" id="sortHeaderFontSize" value="16" min="8" max="72" style="max-width: 120px;">
+                                    </div>
+
+                                    <div class="form-check small mb-2">
+                                        <input class="form-check-input" type="checkbox" id="pageBreakOnPrimaryChange">
+                                        <label class="form-check-label text-dark" for="pageBreakOnPrimaryChange">
+                                            Enable primary sort grouping
+                                        </label>
+                                    </div>
+                                    <div id="primaryBreakOptions" style="display: none;" class="ms-3 p-2 bg-light rounded border mb-2">
+                                        <div class="form-check small mb-1">
+                                            <input class="form-check-input" type="radio" name="primaryBreakType" id="breakTypeNewPage" value="new_page" checked>
+                                            <label class="form-check-label text-dark" for="breakTypeNewPage">New page</label>
                                         </div>
-                                        <div class="col-6">
-                                            <label for="dividerWidth" class="form-label"
-                                                style="font-size: 0.85rem;">Width (%)</label>
-                                            <input type="number" class="form-control form-control-sm" id="dividerWidth"
-                                                value="80" min="10" max="100" step="5">
+                                        <div class="form-check small mb-1">
+                                            <input class="form-check-input" type="radio" name="primaryBreakType" id="breakTypeDivider" value="divider">
+                                            <label class="form-check-label text-dark" for="breakTypeDivider">Horizontal divider line</label>
+                                        </div>
+                                        <div id="dividerSettings" style="display: none;" class="pt-2 border-top mt-2">
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <label for="dividerThickness" class="form-label fs-8 text-muted mb-1">Thickness (px)</label>
+                                                    <input type="number" class="form-control form-control-sm border-secondary-subtle" id="dividerThickness" value="5" min="1" max="20">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label for="dividerWidth" class="form-label fs-8 text-muted mb-1">Width (%)</label>
+                                                    <input type="number" class="form-control form-control-sm border-secondary-subtle" id="dividerWidth" value="80" min="10" max="100" step="5">
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <div>
+                                        <label for="sortBySecondary" class="form-label small text-muted mb-1">Secondary Sort</label>
+                                        <select class="form-select form-select-sm border-secondary-subtle" id="sortBySecondary">
+                                            <option value="none" selected>None</option>
+                                        </select>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="sortBySecondary" class="form-label">Secondary Sort</label>
-                                <select class="form-select form-select-sm" id="sortBySecondary">
-                                    <option value="none" selected>None</option>
-                                </select>
                             </div>
                         </div>
 
-                        <div class="col-md-4">
-                            <h6><i class="bi bi-rulers-vertical"></i> Scale Bar & Tables</h6>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="addScaleBar" checked>
-                                <label class="form-check-label" for="addScaleBar">Add Scale Bar</label>
-                            </div>
-                            <div id="scaleBarSettings" class="mb-3">
-                                <div class="row">
-                                    <div class="col-6 mb-2">
-                                        <label for="scaleBarCm" class="form-label">Scale (cm)</label>
-                                        <input type="number" class="form-control form-control-sm" id="scaleBarCm"
-                                            value="5" min="1">
+                        <!-- Column 3: Scale Bar & Tables -->
+                        <div class="col-lg-4 col-md-12">
+                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                                    <div class="icon-shape bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; background-color: #f59e0b !important;">
+                                        <i class="bi bi-sliders2-vertical fs-6"></i>
                                     </div>
-                                    <div class="col-6 mb-2">
-                                        <label for="pixelsPerCm" class="form-label">Px/cm</label>
-                                        <input type="number" class="form-control form-control-sm" id="pixelsPerCm"
-                                            value="118" min="10">
-                                    </div>
+                                    <h5 class="mb-0 fw-bold text-dark">Scale Bar & Tables</h5>
                                 </div>
-                            </div>
 
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="addTableNumber" checked>
-                                <label class="form-check-label" for="addTableNumber">Add Table Numbers</label>
-                            </div>
-                            <div id="tableNumberSettings">
-                                <div class="row">
-                                    <div class="col-6 mb-2">
-                                        <label for="tablePrefix" class="form-label">Prefix</label>
-                                        <input type="text" class="form-control form-control-sm" id="tablePrefix"
-                                            value="Tav.">
+                                <!-- Scale Bar Settings -->
+                                <div class="mb-4 p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="addScaleBar" checked>
+                                        <label class="form-check-label fw-bold text-dark ms-1" for="addScaleBar">Add Scale Bar</label>
                                     </div>
-                                    <div class="col-6 mb-2">
-                                        <label for="tableStartNumber" class="form-label">Start #</label>
-                                        <input type="number" class="form-control form-control-sm" id="tableStartNumber"
-                                            value="1" min="1">
+                                    <div id="scaleBarSettings" class="pt-2 border-top mt-2">
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <label for="scaleBarCm" class="form-label small text-muted mb-1">Scale (cm)</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="scaleBarCm" value="5" min="1">
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="pixelsPerCm" class="form-label small text-muted mb-1">Px / cm</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="pixelsPerCm" value="118" min="10">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-6 mb-2">
-                                        <label for="tableFontSize" class="form-label">Font Size</label>
-                                        <input type="number" class="form-control form-control-sm" id="tableFontSize"
-                                            value="18" min="10">
+
+                                <!-- Table Number Settings -->
+                                <div class="p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="addTableNumber" checked>
+                                        <label class="form-check-label fw-bold text-dark ms-1" for="addTableNumber">Add Table Numbers</label>
                                     </div>
-                                    <div class="col-6 mb-2">
-                                        <label for="tablePosition" class="form-label">Position</label>
-                                        <select class="form-select form-select-sm" id="tablePosition">
-                                            <option value="top_left" selected>Top Left</option>
-                                            <option value="top_right">Top Right</option>
-                                            <option value="bottom_left">Bottom Left</option>
-                                            <option value="bottom_right">Bottom Right</option>
-                                        </select>
+                                    <div id="tableNumberSettings" class="pt-2 border-top mt-2">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <label for="tablePrefix" class="form-label small text-muted mb-1">Prefix</label>
+                                                <input type="text" class="form-control form-control-sm border-secondary-subtle" id="tablePrefix" value="Tav.">
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="tableStartNumber" class="form-label small text-muted mb-1">Start #</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="tableStartNumber" value="1" min="1">
+                                            </div>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <label for="tableFontSize" class="form-label small text-muted mb-1">Font Size</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="tableFontSize" value="18" min="10">
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="tablePosition" class="form-label small text-muted mb-1">Position</label>
+                                                <select class="form-select form-select-sm border-secondary-subtle" id="tablePosition">
+                                                    <option value="top_left" selected>Top Left</option>
+                                                    <option value="top_right">Top Right</option>
+                                                    <option value="bottom_left">Bottom Left</option>
+                                                    <option value="bottom_right">Bottom Right</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -673,7 +808,7 @@
 
                     <h2 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem; color: #000;">
                         PyPotteryLayout</h2>
-                    <p style="font-size: 1.2rem; color: #666; margin-bottom: 1.5rem;">Version 0.3.1</p>
+                    <p style="font-size: 1.2rem; color: #666; margin-bottom: 1.5rem;">Version {{ version }}</p>
 
                     <p style="font-size: 1rem; color: #333; margin-bottom: 1.5rem; line-height: 1.6;">
                         Create archaeological artefacts tables effortlessly<br>
@@ -696,6 +831,27 @@
         </div>
     </div>
 
+    <!-- Full-Screen Image Upload Loading Overlay -->
+    <div id="imageUploadOverlay" class="image-upload-overlay" style="display: none;">
+        <div class="upload-overlay-card">
+            <div class="upload-overlay-icon-container">
+                <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="PyPotteryLayout Logo" class="upload-overlay-logo">
+                <div class="upload-overlay-spinner"></div>
+            </div>
+            <h3 class="upload-overlay-title" id="uploadOverlayTitle">Uploading images...</h3>
+            <p class="upload-overlay-subtitle" id="uploadOverlaySubtitle">Preparing files...</p>
+            
+            <div class="upload-overlay-progress-container">
+                <div class="upload-overlay-progress-bar" id="uploadOverlayProgressBar" style="width: 0%;"></div>
+            </div>
+            
+            <div class="upload-overlay-stats">
+                <span id="uploadOverlayStatsText"><i class="bi bi-images"></i> 0 / 0 images</span>
+                <span id="uploadOverlayPercentText" class="fw-bold">0%</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Preview Zoom Modal -->
     <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -714,7 +870,7 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ version }}"></script>
 </body>
 
 </html>

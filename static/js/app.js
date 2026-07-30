@@ -116,6 +116,23 @@ function setupEventListeners() {
         objectNumberSettings.style.display = this.checked ? 'block' : 'none';
     });
 
+    // Show primary sort value as a per-image title - show/hide font size option
+    document.getElementById('showPrimarySortHeader').addEventListener('change', function () {
+        document.getElementById('sortHeaderOptions').style.display = this.checked ? 'block' : 'none';
+    });
+
+    // Scale input mode - decimal slider vs ratio (1:N)
+    document.querySelectorAll('input[name="scaleInputMode"]').forEach(radio => {
+        radio.addEventListener('change', function () {
+            const isRatio = this.value === 'ratio';
+            document.getElementById('scaleDecimalMode').style.display = isRatio ? 'none' : 'block';
+            document.getElementById('scaleRatioMode').style.display = isRatio ? 'flex' : 'none';
+            updateScaleRatioDisplay();
+        });
+    });
+    document.getElementById('scaleRatioA').addEventListener('input', updateScaleRatioDisplay);
+    document.getElementById('scaleRatioB').addEventListener('input', updateScaleRatioDisplay);
+
     // Page break on primary change - show/hide options
     document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', function () {
         const primaryBreakOptions = document.getElementById('primaryBreakOptions');
@@ -149,6 +166,32 @@ function setupEventListeners() {
     setupPreviewAutoUpdate();
 }
 
+/** Resolved decimal scale factor, from whichever input mode (decimal slider
+ * or A:B ratio) is currently active. Always returns a plain float so the
+ * rest of the app (preview + generate payloads, scale bar sizing) can stay
+ * unaware of which mode produced it. */
+function getResolvedScaleFactor() {
+    const isRatio = document.getElementById('scaleModeRatio').checked;
+    if (isRatio) {
+        const a = parseFloat(document.getElementById('scaleRatioA').value);
+        const b = parseFloat(document.getElementById('scaleRatioB').value);
+        if (a > 0 && b > 0) return a / b;
+        return 1.0;
+    }
+    return parseFloat(document.getElementById('scaleFactor').value);
+}
+
+function updateScaleRatioDisplay() {
+    const a = parseFloat(document.getElementById('scaleRatioA').value);
+    const b = parseFloat(document.getElementById('scaleRatioB').value);
+    const display = document.getElementById('scaleRatioDisplay');
+    if (a > 0 && b > 0) {
+        display.textContent = (a / b).toFixed(2) + 'x';
+    } else {
+        display.textContent = '--';
+    }
+}
+
 function setupPreviewAutoUpdate() {
     // Debounce function to avoid too many preview requests
     let previewTimeout;
@@ -168,6 +211,11 @@ function setupPreviewAutoUpdate() {
 
     document.getElementById('pageSize').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('scaleFactor').addEventListener('input', schedulePreviewUpdate);
+    document.getElementById('scaleRatioA').addEventListener('input', schedulePreviewUpdate);
+    document.getElementById('scaleRatioB').addEventListener('input', schedulePreviewUpdate);
+    document.querySelectorAll('input[name="scaleInputMode"]').forEach(radio => {
+        radio.addEventListener('change', schedulePreviewUpdate);
+    });
     document.getElementById('marginPx').addEventListener('input', schedulePreviewUpdate);
     document.getElementById('spacingPx').addEventListener('input', schedulePreviewUpdate);
     document.getElementById('gridRows').addEventListener('change', schedulePreviewUpdate);
@@ -176,6 +224,8 @@ function setupPreviewAutoUpdate() {
     document.getElementById('sortBySecondary').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('showMarginBorder').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('showPrimarySortHeader').addEventListener('change', schedulePreviewUpdate);
+    document.getElementById('sortHeaderFontSize').addEventListener('input', schedulePreviewUpdate);
     document.getElementById('verticalAlignment').addEventListener('change', schedulePreviewUpdate);
     document.getElementById('dividerThickness').addEventListener('input', schedulePreviewUpdate);
     document.getElementById('dividerWidth').addEventListener('input', schedulePreviewUpdate);
@@ -199,25 +249,45 @@ async function handleImageUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    // 1. Show full-screen upload overlay IMMEDIATELY
+    showUploadOverlay(files.length);
+
+    // 2. Yield to browser render thread so the overlay is painted on screen instantly before heavy processing!
+    await new Promise(resolve => setTimeout(resolve, 50));
+
     logTerminal(`Ready to process images...`, 'info');
     logTerminal(`Uploading ${files.length} images...`, 'info');
+
+    // Prominent feedback next to file input
+    imageUpload.disabled = true;
+    uploadStatus.className = 'mt-2 alert alert-primary d-flex align-items-center gap-2 py-2 px-3 mb-0';
+    uploadStatus.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> <span>Uploading ${files.length} images...</span>`;
 
     // Upload in batches of 100 images to avoid payload size issues
     const BATCH_SIZE = 100;
     const totalFiles = files.length;
-    const filesArray = Array.from(files);
     let uploadedCount = 0;
     let allErrors = [];
 
     try {
-        // Upload in batches
+        // Upload in batches slice-by-slice without heavy upfront memory allocations
         for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
-            const batch = filesArray.slice(i, Math.min(i + BATCH_SIZE, totalFiles));
             const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
             const totalBatches = Math.ceil(totalFiles / BATCH_SIZE);
+            const batchEnd = Math.min(i + BATCH_SIZE, totalFiles);
+            const batch = [];
+            for (let k = i; k < batchEnd; k++) {
+                batch.push(files[k]);
+            }
 
             showProgress(`Uploading batch ${batchNumber}/${totalBatches} (${batch.length} images)...`);
+            uploadStatus.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> <span>Uploading batch ${batchNumber}/${totalBatches} (${batch.length} images)...</span>`;
             logTerminal(`Batch ${batchNumber}/${totalBatches}: ${batch.length} images`, 'info');
+
+            updateUploadOverlay(uploadedCount, totalFiles, `Uploading batch ${batchNumber} of ${totalBatches} (${batch.length} images)...`);
+
+            // Yield to browser UI thread to keep smooth progress bar animation and prevent UI freeze
+            await new Promise(resolve => setTimeout(resolve, 40));
 
             const formData = new FormData();
             // Add flag to indicate if this is the first batch (should clear folder)
@@ -236,6 +306,8 @@ async function handleImageUpload(e) {
 
             if (data.success) {
                 uploadedCount += data.uploaded;
+                updateUploadOverlay(uploadedCount, totalFiles);
+                await new Promise(resolve => setTimeout(resolve, 30));
                 if (data.errors && data.errors.length > 0) {
                     allErrors = allErrors.concat(data.errors);
                 }
@@ -246,6 +318,7 @@ async function handleImageUpload(e) {
 
         // All batches uploaded successfully
         uploadedImages = true;
+        uploadStatus.className = 'mt-2';
         uploadStatus.innerHTML = `<span class="upload-success"><i class="bi bi-check-circle"></i> ${uploadedCount} images uploaded</span>`;
         logTerminal(`Successfully uploaded ${uploadedCount} images`, 'success');
 
@@ -253,17 +326,22 @@ async function handleImageUpload(e) {
             allErrors.forEach(err => logTerminal(err, 'warning'));
         }
 
+        // Update status text on overlay before preview generation
+        updateUploadOverlayStatus('Generating preview...', 'Processing layout preview for uploaded images...');
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Generate preview after upload
+        await generateLayoutPreview();
+
     } catch (error) {
+        uploadStatus.className = 'mt-2';
         uploadStatus.innerHTML = `<span class="upload-error"><i class="bi bi-x-circle"></i> Upload error</span>`;
         logTerminal(`Error: ${error.message}`, 'error');
     } finally {
+        imageUpload.disabled = false;
         hideProgress();
         updateUIState();
-
-        // Generate preview after upload
-        if (uploadedImages) {
-            generateLayoutPreview();
-        }
+        hideUploadOverlay();
     }
 }
 
@@ -291,7 +369,7 @@ async function generateLayoutPreview() {
             pageSize: document.getElementById('pageSize').value,
             sortBy: document.getElementById('sortBy').value,
             sortBySecondary: document.getElementById('sortBySecondary').value,
-            scaleFactor: document.getElementById('scaleFactor').value,
+            scaleFactor: getResolvedScaleFactor(),
             marginPx: document.getElementById('marginPx').value,
             spacingPx: document.getElementById('spacingPx').value,
             gridRows: document.getElementById('gridRows').value,
@@ -314,6 +392,8 @@ async function generateLayoutPreview() {
             showMarginBorder: document.getElementById('showMarginBorder').checked,
             pageBreakOnPrimaryChange: document.getElementById('pageBreakOnPrimaryChange').checked,
             primaryBreakType: document.querySelector('input[name="primaryBreakType"]:checked')?.value || 'new_page',
+            showPrimarySortHeader: document.getElementById('showPrimarySortHeader').checked,
+            sortHeaderFontSize: parseInt(document.getElementById('sortHeaderFontSize').value) || 16,
             dividerThickness: parseInt(document.getElementById('dividerThickness').value) || 5,
             dividerWidth: parseInt(document.getElementById('dividerWidth').value) || 80,
             verticalAlignment: document.getElementById('verticalAlignment').value,
@@ -392,6 +472,10 @@ async function handleMetadataUpload(e) {
 
     logTerminal(`Uploading metadata file: ${file.name}`, 'info');
     showProgress('Uploading metadata...');
+    metadataUpload.disabled = true;
+    metadataStatus.className = 'mt-2 alert alert-primary d-flex align-items-center gap-2 py-2 px-3 mb-0';
+    metadataStatus.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> <span>Loading ${file.name}...</span>`;
+    metadataStatus.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     const formData = new FormData();
     formData.append('metadata', file);
@@ -404,6 +488,7 @@ async function handleMetadataUpload(e) {
 
         const data = await response.json();
 
+        metadataStatus.className = 'mt-2';
         if (data.success) {
             uploadedMetadata = true;
             metadataHeaders = data.headers || [];
@@ -416,9 +501,11 @@ async function handleMetadataUpload(e) {
             logTerminal(`Metadata error: ${data.error}`, 'error');
         }
     } catch (error) {
+        metadataStatus.className = 'mt-2';
         metadataStatus.innerHTML = `<span class="upload-error"><i class="bi bi-x-circle"></i> Upload error</span>`;
         logTerminal(`Error: ${error.message}`, 'error');
     } finally {
+        metadataUpload.disabled = false;
         hideProgress();
         updateUIState();
     }
@@ -444,7 +531,7 @@ async function handleGenerate() {
     const settings = {
         mode: document.querySelector('input[name="mode"]:checked').value,
         page_size: document.getElementById('pageSize').value,
-        scale_factor: parseFloat(document.getElementById('scaleFactor').value),
+        scale_factor: getResolvedScaleFactor(),
         margin_px: parseInt(document.getElementById('marginPx').value),
         spacing_px: parseInt(document.getElementById('spacingPx').value),
         grid_rows: parseInt(document.getElementById('gridRows').value),
@@ -469,6 +556,8 @@ async function handleGenerate() {
         show_margin_border: document.getElementById('showMarginBorder').checked,
         page_break_on_primary_change: document.getElementById('pageBreakOnPrimaryChange').checked,
         primary_break_type: document.querySelector('input[name="primaryBreakType"]:checked')?.value || 'new_page',
+        show_primary_sort_header: document.getElementById('showPrimarySortHeader').checked,
+        sort_header_font_size: parseInt(document.getElementById('sortHeaderFontSize').value) || 16,
         divider_thickness: parseInt(document.getElementById('dividerThickness').value) || 5,
         divider_width: parseInt(document.getElementById('dividerWidth').value) || 80,
         vertical_alignment: document.getElementById('verticalAlignment').value,
@@ -653,6 +742,59 @@ function hideProgress() {
     progressContainer.style.display = 'none';
     progressBar.style.width = '0%';
     updateUIState();
+}
+
+// Full-Screen Upload Overlay Helper Functions
+function showUploadOverlay(totalFiles) {
+    const overlay = document.getElementById('imageUploadOverlay');
+    const title = document.getElementById('uploadOverlayTitle');
+    const subtitle = document.getElementById('uploadOverlaySubtitle');
+    const progressBar = document.getElementById('uploadOverlayProgressBar');
+    const statsText = document.getElementById('uploadOverlayStatsText');
+    const percentText = document.getElementById('uploadOverlayPercentText');
+
+    if (!overlay) return;
+
+    if (title) title.textContent = 'Uploading images...';
+    if (subtitle) subtitle.textContent = `Preparing ${totalFiles} images for upload...`;
+    if (progressBar) progressBar.style.width = '0%';
+    if (statsText) statsText.innerHTML = `<i class="bi bi-images"></i> 0 / ${totalFiles} images`;
+    if (percentText) percentText.textContent = '0%';
+
+    overlay.style.display = 'flex';
+    void overlay.offsetWidth; // Force reflow for smooth CSS transition
+    overlay.classList.add('active');
+}
+
+function updateUploadOverlay(uploadedCount, totalFiles, customSubtitle = null) {
+    const subtitle = document.getElementById('uploadOverlaySubtitle');
+    const progressBar = document.getElementById('uploadOverlayProgressBar');
+    const statsText = document.getElementById('uploadOverlayStatsText');
+    const percentText = document.getElementById('uploadOverlayPercentText');
+
+    const percent = Math.min(100, Math.round((uploadedCount / totalFiles) * 100));
+
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (percentText) percentText.textContent = `${percent}%`;
+    if (statsText) statsText.innerHTML = `<i class="bi bi-images"></i> ${uploadedCount} / ${totalFiles} images`;
+    if (subtitle && customSubtitle) subtitle.textContent = customSubtitle;
+}
+
+function updateUploadOverlayStatus(titleText, subtitleText) {
+    const title = document.getElementById('uploadOverlayTitle');
+    const subtitle = document.getElementById('uploadOverlaySubtitle');
+    if (title) title.textContent = titleText;
+    if (subtitle) subtitle.textContent = subtitleText;
+}
+
+function hideUploadOverlay() {
+    const overlay = document.getElementById('imageUploadOverlay');
+    if (!overlay) return;
+
+    overlay.classList.remove('active');
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 300);
 }
 
 function logTerminal(message, type = 'info') {

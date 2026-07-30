@@ -36,7 +36,19 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp'}
 app.config['ALLOWED_METADATA'] = {'xlsx', 'csv'}
 
-VERSION = "0.3.1"  # Version bump for SVG support
+def _read_version(default: str) -> str:
+    """Read the release version from VERSION (bumped automatically by the
+    auto-release GitHub Action on every release), falling back to `default`
+    for local/dev runs where that file doesn't exist yet."""
+    version_file = os.path.join(BASE_PATH, "VERSION")
+    try:
+        with open(version_file, "r", encoding="utf-8") as f:
+            return f.read().strip() or default
+    except OSError:
+        return default
+
+
+VERSION = _read_version("0.3.1")
 
 # Ensure folders exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -260,13 +272,14 @@ def preview():
         page_break_on_primary_change = data.get('pageBreakOnPrimaryChange', False)
         primary_break_type = data.get('primaryBreakType', 'new_page')
         show_primary_sort_header = data.get('showPrimarySortHeader', False)
+        sort_header_font_size = int(data.get('sortHeaderFontSize', 16))
         divider_thickness = int(data.get('dividerThickness', 5))
         divider_width_percent = int(data.get('dividerWidth', 80))
         vertical_alignment = data.get('verticalAlignment', 'center')
         add_object_number = data.get('addObjectNumber', False)
         object_number_position = data.get('objectNumberPosition', 'bottom_center')
         object_number_font_size = int(data.get('objectNumberFontSize', 18))
-        
+
         # Load images
         image_data = backend_logic.load_images_with_info(session_folder)
         if not image_data:
@@ -288,19 +301,47 @@ def preview():
             image_data, sort_by, sort_by_secondary, metadata
         )
         
-        # Primary sort key function
-        primary_sort_key_func = None
-        if page_break_on_primary_change:
-            def get_primary_sort_value(img_data):
-                if sort_by == 'alphabetical': return img_data['name'].lower()
-                elif sort_by == 'natural_name': return backend_logic.natural_sort_key(img_data['name'])
-                elif sort_by == 'size': return img_data.get('size', 0)
-                elif metadata and img_data['name'] in metadata:
-                    value = metadata[img_data['name']].get(sort_by, '')
-                    return value if value is not None else ''
+        # Primary sort key function (used for page-break/grouping comparisons)
+        def get_primary_sort_value(img_data):
+            if sort_by == 'alphabetical': return img_data['name'].lower()
+            elif sort_by == 'natural_name': return backend_logic.natural_sort_key(img_data['name'])
+            elif sort_by == 'size': return img_data.get('size', 0)
+            elif metadata and backend_logic.normalize_match_key(img_data['name']) in metadata:
+                value = metadata[backend_logic.normalize_match_key(img_data['name'])].get(sort_by, '')
+                return value if value is not None else ''
+            return ''
+        primary_sort_key_func = get_primary_sort_value if page_break_on_primary_change else None
+
+        # Primary sort DISPLAY value (used for the per-image title overlay) -
+        # a clean human-readable string, distinct from the grouping key above
+        # (which for natural_name returns a sort-key list, not display text).
+        def get_primary_sort_display_value(img_data):
+            if sort_by in ('alphabetical', 'natural_name'): return img_data['name']
+            elif sort_by == 'size': return str(img_data.get('size', ''))
+            elif metadata:
+                key = backend_logic.normalize_match_key(img_data['name'])
+                if key in metadata:
+                    value = metadata[key].get(sort_by, '')
+                    return str(value) if value is not None else ''
+            return ''
+
+        # The title behaves like a book chapter heading: it should only
+        # appear once, on the first image of each primary-sort group, not
+        # repeated on every single image. image_data is already sorted, so a
+        # closure tracking the last-seen group key (in sequential call order)
+        # is enough to detect "this is a new group" without needing a
+        # separate pre-pass.
+        sort_title_func = None
+        if show_primary_sort_header:
+            _sort_title_state = {'value': None, 'seen_first': False}
+            def sort_title_func(img_data):
+                current = get_primary_sort_value(img_data)
+                if not _sort_title_state['seen_first'] or current != _sort_title_state['value']:
+                    _sort_title_state['seen_first'] = True
+                    _sort_title_state['value'] = current
+                    return get_primary_sort_display_value(img_data)
                 return ''
-            primary_sort_key_func = get_primary_sort_value
-        
+
         # Scale images
         image_data = backend_logic.scale_images(image_data, scale_factor)
         
@@ -339,7 +380,9 @@ def preview():
                 vertical_alignment=vertical_alignment,
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
-                object_number_font_size=object_number_font_size
+                object_number_font_size=object_number_font_size,
+                sort_title_func=sort_title_func,
+                sort_title_font_size=sort_header_font_size
             )
         else:
             pil_pages, _ = backend_logic.place_images_puzzle(
@@ -348,7 +391,9 @@ def preview():
                 primary_sort_key=primary_sort_key_func,
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
-                object_number_font_size=object_number_font_size
+                object_number_font_size=object_number_font_size,
+                sort_title_func=sort_title_func,
+                sort_title_font_size=sort_header_font_size
             )
         
         if not pil_pages:
@@ -378,9 +423,10 @@ def preview():
                 try: font = backend_logic.get_font(table_font_size)
                 except: font = ImageFont.load_default()
                 text = f"{table_prefix} {table_start_number + page_idx}"
-                
-                # Basic positioning logic
-                pad = margin_px
+
+                # Basic positioning logic - when the margin border is shown,
+                # nudge the label inward so it doesn't sit flush on the line.
+                pad = margin_px + (15 if show_margin_border else 0)
                 if table_position == 'top_left': xy = (pad, pad)
                 elif table_position == 'top_right': 
                     bbox = draw.textbbox((0,0), text, font=font)
@@ -457,6 +503,7 @@ def generate_layout():
         page_break_on_primary_change = data.get('page_break_on_primary_change', False)
         primary_break_type = data.get('primary_break_type', 'new_page')
         show_primary_sort_header = data.get('show_primary_sort_header', False)
+        sort_header_font_size = int(data.get('sort_header_font_size', 16))
         divider_thickness = int(data.get('divider_thickness', 5))
         divider_width_percent = int(data.get('divider_width', 80))
         vertical_alignment = data.get('vertical_alignment', 'center')
@@ -478,19 +525,44 @@ def generate_layout():
             image_data, sort_by, sort_by_secondary, metadata
         )
         
-        # Sort key logic
-        primary_sort_key_func = None
-        if page_break_on_primary_change:
-            def get_primary_sort_value(img_data):
-                if sort_by == 'alphabetical': return img_data['name'].lower()
-                elif sort_by == 'natural_name': return backend_logic.natural_sort_key(img_data['name'])
-                elif sort_by == 'size': return img_data.get('size', 0)
-                elif metadata and img_data['name'] in metadata:
-                    value = metadata[img_data['name']].get(sort_by, '')
-                    return value if value is not None else ''
+        # Sort key logic (used for page-break/grouping comparisons)
+        def get_primary_sort_value(img_data):
+            if sort_by == 'alphabetical': return img_data['name'].lower()
+            elif sort_by == 'natural_name': return backend_logic.natural_sort_key(img_data['name'])
+            elif sort_by == 'size': return img_data.get('size', 0)
+            elif metadata and backend_logic.normalize_match_key(img_data['name']) in metadata:
+                value = metadata[backend_logic.normalize_match_key(img_data['name'])].get(sort_by, '')
+                return value if value is not None else ''
+            return ''
+        primary_sort_key_func = get_primary_sort_value if page_break_on_primary_change else None
+
+        # Primary sort DISPLAY value (per-image title overlay) - clean string,
+        # distinct from the grouping key above (natural_name there returns a
+        # sort-key list, not display text).
+        def get_primary_sort_display_value(img_data):
+            if sort_by in ('alphabetical', 'natural_name'): return img_data['name']
+            elif sort_by == 'size': return str(img_data.get('size', ''))
+            elif metadata:
+                key = backend_logic.normalize_match_key(img_data['name'])
+                if key in metadata:
+                    value = metadata[key].get(sort_by, '')
+                    return str(value) if value is not None else ''
+            return ''
+
+        # Chapter-heading behavior: only the first image of each primary-sort
+        # group gets the title, not every image (image_data is already
+        # sorted, so tracking the last-seen group key in call order suffices).
+        sort_title_func = None
+        if show_primary_sort_header:
+            _sort_title_state = {'value': None, 'seen_first': False}
+            def sort_title_func(img_data):
+                current = get_primary_sort_value(img_data)
+                if not _sort_title_state['seen_first'] or current != _sort_title_state['value']:
+                    _sort_title_state['seen_first'] = True
+                    _sort_title_state['value'] = current
+                    return get_primary_sort_display_value(img_data)
                 return ''
-            primary_sort_key_func = get_primary_sort_value
-        
+
         # Scale
         image_data = backend_logic.scale_images(image_data, scale_factor)
         
@@ -530,7 +602,9 @@ def generate_layout():
                 vertical_alignment=vertical_alignment,
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
-                object_number_font_size=object_number_font_size
+                object_number_font_size=object_number_font_size,
+                sort_title_func=sort_title_func,
+                sort_title_font_size=sort_header_font_size
             )
         else:
             pil_pages, svg_pages = backend_logic.place_images_puzzle(
@@ -539,7 +613,9 @@ def generate_layout():
                 primary_sort_key=primary_sort_key_func,
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
-                object_number_font_size=object_number_font_size
+                object_number_font_size=object_number_font_size,
+                sort_title_func=sort_title_func,
+                sort_title_font_size=sort_header_font_size
             )
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -562,9 +638,17 @@ def generate_layout():
                     try: font = backend_logic.get_font(table_font_size)
                     except: font = ImageFont.load_default()
                     text = f"{table_prefix} {table_start_number + i}"
-                    # Simple top-left assumption or reuse preview logic
-                    draw.text((margin_px, margin_px), text, font=font, fill="black")
-            
+
+                    # Same position + border-detachment logic as the preview route.
+                    pad = margin_px + (15 if show_margin_border else 0)
+                    if table_position == 'top_left': xy = (pad, pad)
+                    elif table_position == 'top_right':
+                        bbox = draw.textbbox((0, 0), text, font=font)
+                        xy = (page_w - bbox[2] - pad, pad)
+                    else: xy = (pad, pad)  # Default
+
+                    draw.text(xy, text, font=font, fill="black")
+
             if show_margin_border:
                 from PIL import ImageDraw
                 for page in pil_pages:

@@ -15,6 +15,17 @@ from PIL import Image, ImageDraw, ImageFont
 import rectpack
 import openpyxl
 
+def normalize_match_key(value):
+    """Normalize a filename or metadata id for matching: drop the extension
+    (if any), strip surrounding whitespace, and lowercase. Applied to both
+    sides of the image<->metadata lookup so 'Ciao.png' matches an id of
+    'Ciao', 'ciao', or 'Ciao.png' alike, instead of requiring an exact,
+    case-sensitive, extension-included match."""
+    text = str(value).strip()
+    stem = os.path.splitext(text)[0]
+    return stem.lower()
+
+
 # Default page sizes in pixels (300 DPI approximations)
 PAGE_SIZES_PX = {
     'A4': (2480, 3508),
@@ -169,7 +180,7 @@ def load_metadata(filepath, status_callback=print):
                     return None
                 for row in reader:
                     if row and row[0]:
-                        metadata[row[0]] = {header[i]: row[i] if i < len(row) else None for i in range(1, len(header))}
+                        metadata[normalize_match_key(row[0])] = {header[i]: row[i] if i < len(row) else None for i in range(1, len(header))}
         else:
             # Excel file
             workbook = openpyxl.load_workbook(filepath)
@@ -177,7 +188,7 @@ def load_metadata(filepath, status_callback=print):
             header = [cell.value for cell in sheet[1]]
             for row in sheet.iter_rows(min_row=2, values_only=True):
                 if row and row[0]:
-                    metadata[row[0]] = {header[i]: row[i] for i in range(1, len(row))}
+                    metadata[normalize_match_key(row[0])] = {header[i]: row[i] for i in range(1, len(row))}
         
         status_callback(f"Loaded metadata for {len(metadata)} items.")
         return metadata
@@ -223,8 +234,9 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
         elif sort_field == 'natural_name': return (2, 0, natural_sort_key(img_data['name']))
         elif sort_field == 'alphabetical': return (2, 0, img_data['name'].lower())
         else:
-            if metadata and img_data['name'] in metadata:
-                value = metadata[img_data['name']].get(sort_field, '')
+            match_key = normalize_match_key(img_data['name'])
+            if metadata and match_key in metadata:
+                value = metadata[match_key].get(sort_field, '')
                 if value is None: return (2, 0, 'zzz_empty')
                 try: return (1, float(str(value).strip()), '')
                 except ValueError: return (2, 0, str(value).lower())
@@ -327,7 +339,7 @@ def add_captions_to_images(image_data, metadata, font_size, caption_padding, rem
         if remove_extension: filename = os.path.splitext(filename)[0]
         caption_lines = [filename]
         
-        img_metadata = metadata.get(data['name']) if metadata else None
+        img_metadata = metadata.get(normalize_match_key(data['name'])) if metadata else None
         if img_metadata:
             fields_to_use = selected_fields if selected_fields else img_metadata.keys()
             for key in fields_to_use:
@@ -438,11 +450,12 @@ def _render_item_to_svg(svg_gen, item_data, abs_x, abs_y):
         svg_gen.add_image(item_data['img'], abs_x, abs_y)
 
 
-def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px, 
-                      page_break_on_primary_change=False, primary_sort_key=None, 
+def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px,
+                      page_break_on_primary_change=False, primary_sort_key=None,
                       primary_break_type='new_page', divider_thickness=5, divider_width_percent=80,
-                      vertical_alignment='center', add_object_number=False, object_number_position='bottom_center', 
-                      object_number_font_size=18, status_callback=print):
+                      vertical_alignment='center', add_object_number=False, object_number_position='bottom_center',
+                      object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                      status_callback=print):
     
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
@@ -465,6 +478,12 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         try: number_font = get_font(object_number_font_size)
         except: number_font = ImageFont.load_default()
 
+    # Font for the chapter-title header
+    title_font = None
+    if sort_title_func:
+        try: title_font = get_font(sort_title_font_size)
+        except: title_font = ImageFont.load_default()
+
     while image_index < len(image_data):
         # Initialize PIL Page
         current_pil_page = Image.new('RGB', page_size_px, 'white')
@@ -472,7 +491,27 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         current_svg_gen = SVGGenerator(page_width, page_height)
         # Add white background rect for SVG
         current_svg_gen.add_rect(0, 0, page_width, page_height, fill="white")
-        
+
+        # Chapter-title header: drawn once per page (like a book chapter
+        # heading), right-aligned in the empty top margin strip - never
+        # overlapping any image, since the margin is space no image is ever
+        # placed in. sort_title_func itself only returns non-empty text for
+        # the first page of a new primary-sort group (see app.py).
+        if sort_title_func and image_index < len(image_data):
+            page_title_text = sort_title_func(image_data[image_index])
+            if page_title_text:
+                title_str = str(page_title_text)
+                title_draw = ImageDraw.Draw(current_pil_page)
+                bbox = title_draw.textbbox((0, 0), title_str, font=title_font)
+                tw = bbox[2] - bbox[0]
+                tx = page_width - margin_px - tw
+                ty = max(5, margin_px // 2 - sort_title_font_size // 2)
+                title_draw.text((tx, ty), title_str, font=title_font, fill="black")
+                current_svg_gen.add_text(
+                    title_str, page_width - margin_px, ty + sort_title_font_size,
+                    sort_title_font_size, font_family="Arial", anchor="end"
+                )
+
         page_has_images = False
         page_object_counter = 1 # Reset per page
         
@@ -575,16 +614,16 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                 
                 # 2. SVG Add (Semantic)
                 _render_item_to_svg(current_svg_gen, img_data, current_x, paste_y)
-                
+
                 # 3. Object Numbering
                 if add_object_number:
                     num_str = str(page_object_counter)
                     page_object_counter += 1
-                    
+
                     draw = ImageDraw.Draw(current_pil_page)
                     font_h = object_number_font_size
                     padding_num = 5
-                    
+
                     if object_number_position == 'bottom_left':
                         # Overlay at bottom-left inside the image block
                         nx = current_x + 5
@@ -597,13 +636,23 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                         # Place BELOW the image block (after it, not overlapping)
                         nx = current_x + (img.width // 2)
                         ny = paste_y + img.height + padding_num  # BELOW the image
-                        
+
                         # PIL - center text
                         bbox = draw.textbbox((0,0), num_str, font=number_font)
                         tw = bbox[2] - bbox[0]
                         draw.text((nx - tw/2, ny), num_str, font=number_font, fill="black")
                         # SVG
                         current_svg_gen.add_text(num_str, nx, ny + font_h, font_h, font_family="Arial", anchor="middle")
+
+                    elif object_number_position == 'bottom_right':
+                        # Overlay at bottom-right inside the image block
+                        bbox = draw.textbbox((0,0), num_str, font=number_font)
+                        tw = bbox[2] - bbox[0]
+                        nx = current_x + img.width - tw - 5
+                        ny = paste_y + img.height - font_h - padding_num
+
+                        draw.text((nx, ny), num_str, font=number_font, fill="black")
+                        current_svg_gen.add_text(num_str, nx + tw, ny + font_h, font_h, font_family="Arial", anchor="end")
 
                 current_x += img.width + spacing_px
                 page_has_images = True
@@ -638,7 +687,22 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
             
             p.paste(img, (px, py))
             _render_item_to_svg(s, img_data, px, py)
-            
+
+            if sort_title_func:
+                title_text = sort_title_func(img_data)
+                if title_text:
+                    title_str = str(title_text)
+                    title_draw = ImageDraw.Draw(p)
+                    bbox = title_draw.textbbox((0, 0), title_str, font=title_font)
+                    tw = bbox[2] - bbox[0]
+                    tx = page_width - margin_px - tw
+                    ty = max(5, margin_px // 2 - sort_title_font_size // 2)
+                    title_draw.text((tx, ty), title_str, font=title_font, fill="black")
+                    s.add_text(
+                        title_str, page_width - margin_px, ty + sort_title_font_size,
+                        sort_title_font_size, font_family="Arial", anchor="end"
+                    )
+
             pil_pages.append(p)
             svg_pages.append(s.get_xml())
             status_callback(f"Created individual page for leftover: {img_data.get('name')}")
@@ -646,11 +710,12 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
     return pil_pages, svg_pages
 
 
-def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px, 
-                        page_break_on_primary_change=False, primary_sort_key=None, 
-                        add_object_number=False, object_number_position='bottom_center', 
-                        object_number_font_size=18, status_callback=print):
-    
+def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
+                        page_break_on_primary_change=False, primary_sort_key=None,
+                        add_object_number=False, object_number_position='bottom_center',
+                        object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                        status_callback=print):
+
     # Wrapper to handle grouping, then delegates to internal
     if page_break_on_primary_change and primary_sort_key:
         from collections import OrderedDict
@@ -659,28 +724,32 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
             k = primary_sort_key(d)
             if k not in groups: groups[k] = []
             groups[k].append(d)
-        
+
         all_pil, all_svg = [], []
         for k, g_imgs in groups.items():
-            p, s = _place_images_puzzle_internal(g_imgs, page_size_px, margin_px, spacing_px, 
-                                               add_object_number=add_object_number, 
+            p, s = _place_images_puzzle_internal(g_imgs, page_size_px, margin_px, spacing_px,
+                                               add_object_number=add_object_number,
                                                object_number_position=object_number_position,
                                                object_number_font_size=object_number_font_size,
+                                               sort_title_func=sort_title_func,
+                                               sort_title_font_size=sort_title_font_size,
                                                status_callback=status_callback)
             all_pil.extend(p)
             all_svg.extend(s)
         return all_pil, all_svg
     else:
-        return _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, 
-                                           add_object_number=add_object_number, 
+        return _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px,
+                                           add_object_number=add_object_number,
                                            object_number_position=object_number_position,
                                            object_number_font_size=object_number_font_size,
+                                           sort_title_func=sort_title_func,
+                                           sort_title_font_size=sort_title_font_size,
                                            status_callback=status_callback)
 
 
-def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px, 
+def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px,
                                   add_object_number=False, object_number_position='bottom_center',
-                                  object_number_font_size=18, 
+                                  object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
                                   status_callback=print):
     page_width, page_height = page_size_px
     bin_width = page_width - (2 * margin_px)
@@ -714,13 +783,35 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
         current_pil = Image.new('RGB', page_size_px, 'white')
         current_svg = SVGGenerator(page_width, page_height)
         current_svg.add_rect(0, 0, page_width, page_height, fill="white")
-        
+
         # Prepare font
         number_font = None
         if add_object_number:
             try: number_font = get_font(object_number_font_size)
             except: number_font = ImageFont.load_default()
-            
+
+        # Chapter-title header: drawn once, on the first page of this batch
+        # (a batch is one primary-sort group when grouping is on, or the
+        # whole flat list otherwise) - like a book chapter heading,
+        # right-aligned in the empty top margin so it never overlaps an
+        # image. sort_title_func only returns non-empty text for a new group.
+        if i == 0 and sort_title_func and image_data:
+            page_title_text = sort_title_func(image_data[0])
+            if page_title_text:
+                title_str = str(page_title_text)
+                try: title_font = get_font(sort_title_font_size)
+                except: title_font = ImageFont.load_default()
+                title_draw = ImageDraw.Draw(current_pil)
+                bbox = title_draw.textbbox((0, 0), title_str, font=title_font)
+                tw = bbox[2] - bbox[0]
+                tx = page_width - margin_px - tw
+                ty = max(5, margin_px // 2 - sort_title_font_size // 2)
+                title_draw.text((tx, ty), title_str, font=title_font, fill="black")
+                current_svg.add_text(
+                    title_str, page_width - margin_px, ty + sort_title_font_size,
+                    sort_title_font_size, font_family="Arial", anchor="end"
+                )
+
         # Collect all rects to sort them by position (reading order)
         page_rects = []
         for rect in abin:
@@ -748,7 +839,7 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
             
             # 2. SVG
             _render_item_to_svg(current_svg, data, x, y)
-            
+
             # 3. Object Numbering
             if add_object_number:
                 num_str = str(page_object_counter)
@@ -769,11 +860,20 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
                     # Place BELOW the image block
                     nx = x + (img.width // 2)
                     ny = y + img.height + padding_num
-                    
+
                     bbox = draw.textbbox((0,0), num_str, font=number_font)
                     tw = bbox[2] - bbox[0]
                     draw.text((nx - tw/2, ny), num_str, font=number_font, fill="black")
                     current_svg.add_text(num_str, nx, ny + font_h, font_h, font_family="Arial", anchor="middle")
+
+                elif object_number_position == 'bottom_right':
+                    bbox = draw.textbbox((0,0), num_str, font=number_font)
+                    tw = bbox[2] - bbox[0]
+                    nx = x + img.width - tw - 5
+                    ny = y + img.height - font_h - padding_num
+
+                    draw.text((nx, ny), num_str, font=number_font, fill="black")
+                    current_svg.add_text(num_str, nx + tw, ny + font_h, font_h, font_family="Arial", anchor="end")
 
             count += 1
             
@@ -795,10 +895,27 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
         # (Scaling logic omitted for brevity, assume pre-scaled or fits)
         x = (page_width - img.width) // 2
         y = (page_height - img.height) // 2
-        
+
         p.paste(img, (x, y))
         _render_item_to_svg(s, d, x, y)
-        
+
+        if sort_title_func:
+            title_text = sort_title_func(d)
+            if title_text:
+                try: leftover_title_font = get_font(sort_title_font_size)
+                except: leftover_title_font = ImageFont.load_default()
+                title_str = str(title_text)
+                title_draw = ImageDraw.Draw(p)
+                bbox = title_draw.textbbox((0, 0), title_str, font=leftover_title_font)
+                tw = bbox[2] - bbox[0]
+                tx = page_width - margin_px - tw
+                ty = max(5, margin_px // 2 - sort_title_font_size // 2)
+                title_draw.text((tx, ty), title_str, font=leftover_title_font, fill="black")
+                s.add_text(
+                    title_str, page_width - margin_px, ty + sort_title_font_size,
+                    sort_title_font_size, font_family="Arial", anchor="end"
+                )
+
         pil_pages.append(p)
         svg_pages.append(s.get_xml())
         status_callback(f"Individual page for unplaced puzzle image: {d['name']}")
