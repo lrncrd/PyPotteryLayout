@@ -455,12 +455,16 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                       primary_break_type='new_page', divider_thickness=5, divider_width_percent=80,
                       vertical_alignment='center', add_object_number=False, object_number_position='bottom_center',
                       object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                      top_margin_px=None,
                       status_callback=print):
     
+    if top_margin_px is None:
+        top_margin_px = margin_px
+
     rows_per_page, suggested_cols = grid_size
     page_width, page_height = page_size_px
     available_width = page_width - (2 * margin_px)
-    available_height = page_height - (2 * margin_px)
+    available_height = page_height - margin_px - top_margin_px
     
     # Output lists
     pil_pages = []
@@ -573,9 +577,9 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         total_separator_height = len(divider_rows) * (divider_thickness + 2 * divider_margin)
         total_height_needed = total_content_height + total_spacing_height + total_separator_height
         
-        start_y = margin_px
+        start_y = top_margin_px
         if vertical_alignment == 'center' and total_height_needed < available_height:
-            start_y = margin_px + (available_height - total_height_needed) // 2
+            start_y = top_margin_px + (available_height - total_height_needed) // 2
         
         # Rendering (Both PIL and SVG)
         current_y = start_y
@@ -683,7 +687,7 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
             img = img_data['img']
             # Scale logic (omitted for brevity, assume fits or scaled previously)
             px = (page_width - img.width) // 2
-            py = (page_height - img.height) // 2
+            py = top_margin_px + max(0, (page_height - margin_px - top_margin_px - img.height) // 2)
             
             p.paste(img, (px, py))
             _render_item_to_svg(s, img_data, px, py)
@@ -714,6 +718,7 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
                         page_break_on_primary_change=False, primary_sort_key=None,
                         add_object_number=False, object_number_position='bottom_center',
                         object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                        top_margin_px=None,
                         status_callback=print):
 
     # Wrapper to handle grouping, then delegates to internal
@@ -733,6 +738,7 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
                                                object_number_font_size=object_number_font_size,
                                                sort_title_func=sort_title_func,
                                                sort_title_font_size=sort_title_font_size,
+                                               top_margin_px=top_margin_px,
                                                status_callback=status_callback)
             all_pil.extend(p)
             all_svg.extend(s)
@@ -744,16 +750,21 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
                                            object_number_font_size=object_number_font_size,
                                            sort_title_func=sort_title_func,
                                            sort_title_font_size=sort_title_font_size,
+                                           top_margin_px=top_margin_px,
                                            status_callback=status_callback)
 
 
 def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px,
                                   add_object_number=False, object_number_position='bottom_center',
                                   object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                                  top_margin_px=None,
                                   status_callback=print):
+    if top_margin_px is None:
+        top_margin_px = margin_px
+
     page_width, page_height = page_size_px
     bin_width = page_width - (2 * margin_px)
-    bin_height = page_height - (2 * margin_px)
+    bin_height = page_height - margin_px - top_margin_px
     
     packer = rectpack.newPacker(rotation=False)
     images = [d['img'] for d in image_data]
@@ -832,7 +843,7 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
             img = data['img']
             
             x = margin_px + rect.x
-            y = margin_px + rect.y
+            y = top_margin_px + rect.y
             
             # 1. PIL
             current_pil.paste(img, (x, y), img if img.mode == 'RGBA' else None)

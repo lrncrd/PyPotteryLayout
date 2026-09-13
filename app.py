@@ -80,14 +80,18 @@ def get_output_folder(create=False):
         os.makedirs(output_folder)
     return output_folder
 
-def inject_svg_overlay(svg_content, scale_bar_data=None, table_num_data=None, page_width=0, page_height=0, margin=0):
+def inject_svg_overlay(svg_content, scale_bar_data=None, table_num_data=None, page_width=0, page_height=0, margin=0, show_margin_border=False):
     """
-    Helper to inject Scale Bar and Table Number into the generated SVG string.
+    Helper to inject Scale Bar, Table Number, and Margin Border into the generated SVG string.
     This mimics the post-processing done on PIL images.
     """
     additions = []
 
-    # 1. Inject Scale Bar (Bottom Right)
+    # 1. Inject Margin Border
+    if show_margin_border and page_width > 0 and page_height > 0:
+        additions.append(f'<rect x="{margin}" y="{margin}" width="{page_width - 2 * margin}" height="{page_height - 2 * margin}" fill="none" stroke="black" stroke-width="2"/>')
+
+    # 2. Inject Scale Bar (Bottom Right)
     if scale_bar_data:
         sb_w = scale_bar_data['width']
         sb_h = scale_bar_data['height']
@@ -107,7 +111,7 @@ def inject_svg_overlay(svg_content, scale_bar_data=None, table_num_data=None, pa
         g += '</g>'
         additions.append(g)
 
-    # 2. Inject Table Number
+    # 3. Inject Table Number
     if table_num_data:
         t_num = table_num_data['number']
         t_pos = table_num_data['position']
@@ -117,20 +121,21 @@ def inject_svg_overlay(svg_content, scale_bar_data=None, table_num_data=None, pa
         
         # Determine coordinates based on position
         tx, ty, anchor = 0, 0, "start"
-        padding = margin
+        pad_x = margin + (15 if show_margin_border else 0)
+        pad_y = margin + (10 if show_margin_border else 0)
         
         if t_pos == 'top_left':
-            tx, ty, anchor = padding, padding + t_size, "start"
+            tx, ty, anchor = pad_x, pad_y + t_size, "start"
         elif t_pos == 'top_center':
-            tx, ty, anchor = page_width / 2, padding + t_size, "middle"
+            tx, ty, anchor = page_width / 2, pad_y + t_size, "middle"
         elif t_pos == 'top_right':
-            tx, ty, anchor = page_width - padding, padding + t_size, "end"
+            tx, ty, anchor = page_width - pad_x, pad_y + t_size, "end"
         elif t_pos == 'bottom_left':
-            tx, ty, anchor = padding, page_height - padding, "start"
+            tx, ty, anchor = pad_x, page_height - pad_x, "start"
         elif t_pos == 'bottom_center':
-            tx, ty, anchor = page_width / 2, page_height - padding, "middle"
+            tx, ty, anchor = page_width / 2, page_height - pad_x, "middle"
         elif t_pos == 'bottom_right':
-            tx, ty, anchor = page_width - padding, page_height - padding, "end"
+            tx, ty, anchor = page_width - pad_x, page_height - pad_x, "end"
 
         additions.append(f'<text x="{tx}" y="{ty}" font-family="Arial" font-size="{t_size}" font-weight="bold" fill="black" text-anchor="{anchor}">{text_str}</text>')
 
@@ -269,6 +274,8 @@ def preview():
         sort_by = data.get('sortBy', 'alphabetical')
         sort_by_secondary = data.get('sortBySecondary', 'none')
         show_margin_border = data.get('showMarginBorder', False)
+        top_spacing_px = int(data.get('topSpacingPx', data.get('top_spacing_px', 40)))
+        effective_top_margin = margin_px + top_spacing_px
         page_break_on_primary_change = data.get('pageBreakOnPrimaryChange', False)
         primary_break_type = data.get('primaryBreakType', 'new_page')
         show_primary_sort_header = data.get('showPrimarySortHeader', False)
@@ -382,7 +389,8 @@ def preview():
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
                 sort_title_func=sort_title_func,
-                sort_title_font_size=sort_header_font_size
+                sort_title_font_size=sort_header_font_size,
+                top_margin_px=effective_top_margin
             )
         else:
             pil_pages, _ = backend_logic.place_images_puzzle(
@@ -393,7 +401,8 @@ def preview():
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
                 sort_title_func=sort_title_func,
-                sort_title_font_size=sort_header_font_size
+                sort_title_font_size=sort_header_font_size,
+                top_margin_px=effective_top_margin
             )
         
         if not pil_pages:
@@ -412,11 +421,7 @@ def preview():
                 bar_y = page_h - scale_bar_img.height - margin_px
                 page.paste(scale_bar_img, (bar_x, bar_y), scale_bar_img if scale_bar_img.mode == 'RGBA' else None)
             
-            # Add table number (Currently no backend function for this, simple draw assumed or implement locally if needed, 
-            # but for brevity utilizing image draw directly here as done in previous versions if backend_logic lacks it, 
-            # or assuming add_table_number_to_page exists in backend from previous context if not removed. 
-            # Since it was not in the *last* provided backend refactor, we implement a simple drawer here or skip).
-            # *Restoring table number logic locally since it was removed from backend refactor*
+            # Add table number
             if add_table_number:
                 from PIL import ImageDraw, ImageFont
                 draw = ImageDraw.Draw(page)
@@ -424,14 +429,19 @@ def preview():
                 except: font = ImageFont.load_default()
                 text = f"{table_prefix} {table_start_number + page_idx}"
 
-                # Basic positioning logic - when the margin border is shown,
-                # nudge the label inward so it doesn't sit flush on the line.
-                pad = margin_px + (15 if show_margin_border else 0)
-                if table_position == 'top_left': xy = (pad, pad)
+                pad_x = margin_px + (15 if show_margin_border else 0)
+                pad_y = margin_px + (10 if show_margin_border else 0)
+                if table_position == 'top_left': xy = (pad_x, pad_y)
                 elif table_position == 'top_right': 
                     bbox = draw.textbbox((0,0), text, font=font)
-                    xy = (page_w - bbox[2] - pad, pad)
-                else: xy = (pad, pad) # Default
+                    xy = (page_w - bbox[2] - pad_x, pad_y)
+                elif table_position == 'bottom_left':
+                    bbox = draw.textbbox((0,0), text, font=font)
+                    xy = (pad_x, page_h - margin_px - (bbox[3] - bbox[1]) - (10 if show_margin_border else 0))
+                elif table_position == 'bottom_right':
+                    bbox = draw.textbbox((0,0), text, font=font)
+                    xy = (page_w - bbox[2] - pad_x, page_h - margin_px - (bbox[3] - bbox[1]) - (10 if show_margin_border else 0))
+                else: xy = (pad_x, pad_y) # Default
                 
                 draw.text(xy, text, font=font, fill="black")
 
@@ -508,6 +518,8 @@ def generate_layout():
         divider_width_percent = int(data.get('divider_width', 80))
         vertical_alignment = data.get('vertical_alignment', 'center')
         show_margin_border = data.get('show_margin_border', False)
+        top_spacing_px = int(data.get('top_spacing_px', data.get('topSpacingPx', 40)))
+        effective_top_margin = margin_px + top_spacing_px
         add_object_number = data.get('add_object_number', False)
         object_number_position = data.get('object_number_position', 'bottom_center')
         object_number_font_size = int(data.get('object_number_font_size', 18))
@@ -604,7 +616,8 @@ def generate_layout():
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
                 sort_title_func=sort_title_func,
-                sort_title_font_size=sort_header_font_size
+                sort_title_font_size=sort_header_font_size,
+                top_margin_px=effective_top_margin
             )
         else:
             pil_pages, svg_pages = backend_logic.place_images_puzzle(
@@ -615,46 +628,53 @@ def generate_layout():
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
                 sort_title_func=sort_title_func,
-                sort_title_font_size=sort_header_font_size
+                sort_title_font_size=sort_header_font_size,
+                top_margin_px=effective_top_margin
             )
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         # === EXPORT LOGIC ===
         
+        # Post-process PIL pages for raster/PDF formats (Scale bar, Table nums, Margin border)
+        if scale_bar_img:
+            for page in pil_pages:
+                bx = page_w - scale_bar_img.width - margin_px
+                by = page_h - scale_bar_img.height - margin_px
+                page.paste(scale_bar_img, (bx, by), scale_bar_img if scale_bar_img.mode == 'RGBA' else None)
+
+        if add_table_number:
+            from PIL import ImageDraw, ImageFont
+            for i, page in enumerate(pil_pages):
+                draw = ImageDraw.Draw(page)
+                try: font = backend_logic.get_font(table_font_size)
+                except: font = ImageFont.load_default()
+                text = f"{table_prefix} {table_start_number + i}"
+
+                pad_x = margin_px + (15 if show_margin_border else 0)
+                pad_y = margin_px + (10 if show_margin_border else 0)
+                if table_position == 'top_left': xy = (pad_x, pad_y)
+                elif table_position == 'top_right':
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    xy = (page_w - bbox[2] - pad_x, pad_y)
+                elif table_position == 'bottom_left':
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    xy = (pad_x, page_h - margin_px - (bbox[3] - bbox[1]) - (10 if show_margin_border else 0))
+                elif table_position == 'bottom_right':
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    xy = (page_w - bbox[2] - pad_x, page_h - margin_px - (bbox[3] - bbox[1]) - (10 if show_margin_border else 0))
+                else: xy = (pad_x, pad_y)
+
+                draw.text(xy, text, font=font, fill="black")
+
+        if show_margin_border:
+            from PIL import ImageDraw
+            for page in pil_pages:
+                draw = ImageDraw.Draw(page)
+                draw.rectangle([margin_px, margin_px, page_w - margin_px, page_h - margin_px], outline="black", width=2)
+
         # 1. PDF Export (Uses PIL Pages)
         if export_format == 'PDF':
-            # Post-process PIL pages (Scale bar + Table nums)
-            if scale_bar_img:
-                for page in pil_pages:
-                    bx = page_w - scale_bar_img.width - margin_px
-                    by = page_h - scale_bar_img.height - margin_px
-                    page.paste(scale_bar_img, (bx, by), scale_bar_img if scale_bar_img.mode == 'RGBA' else None)
-            
-            if add_table_number:
-                from PIL import ImageDraw, ImageFont
-                for i, page in enumerate(pil_pages):
-                    draw = ImageDraw.Draw(page)
-                    try: font = backend_logic.get_font(table_font_size)
-                    except: font = ImageFont.load_default()
-                    text = f"{table_prefix} {table_start_number + i}"
-
-                    # Same position + border-detachment logic as the preview route.
-                    pad = margin_px + (15 if show_margin_border else 0)
-                    if table_position == 'top_left': xy = (pad, pad)
-                    elif table_position == 'top_right':
-                        bbox = draw.textbbox((0, 0), text, font=font)
-                        xy = (page_w - bbox[2] - pad, pad)
-                    else: xy = (pad, pad)  # Default
-
-                    draw.text(xy, text, font=font, fill="black")
-
-            if show_margin_border:
-                from PIL import ImageDraw
-                for page in pil_pages:
-                    draw = ImageDraw.Draw(page)
-                    draw.rectangle([margin_px, margin_px, page_w - margin_px, page_h - margin_px], outline="black", width=2)
-
             output_filename = f'layout_{timestamp}.pdf'
             output_path = os.path.join(output_folder, output_filename)
             pil_pages[0].save(output_path, "PDF", resolution=300.0, 
@@ -662,14 +682,6 @@ def generate_layout():
 
         # 2. JPG Export (Uses PIL Pages)
         elif export_format == 'JPG':
-            # Post-process (Same as PDF)
-            if scale_bar_img:
-                for page in pil_pages:
-                    bx = page_w - scale_bar_img.width - margin_px
-                    by = page_h - scale_bar_img.height - margin_px
-                    page.paste(scale_bar_img, (bx, by), scale_bar_img if scale_bar_img.mode == 'RGBA' else None)
-            
-            # Handle Zip vs Single
             if len(pil_pages) > 1:
                 output_filename = f'layout_{timestamp}.zip'
                 output_path = os.path.join(output_folder, output_filename)
@@ -706,7 +718,8 @@ def generate_layout():
                     table_num_data=t_num_data,
                     page_width=page_w,
                     page_height=page_h,
-                    margin=margin_px
+                    margin=margin_px,
+                    show_margin_border=show_margin_border
                 )
                 final_svgs.append(full_svg)
 

@@ -4,44 +4,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PyPotteryLayout - Create artefacts table effortlessly</title>
+    <title>PyPotteryLayout - Automated Archaeological Publication Plates</title>
+    <meta name="description" content="PyPotteryLayout - Automated generation of publication plates with metric scaling and export to PDF and SVG">
+    <meta name="theme-color" content="#fbf9f5">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <!-- Display font for headings (pairs with Bootstrap's default body font;
-         same family used by the PyPottery Suite launcher for brand consistency) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ version }}">
 
     <style>
-        /* Display font for headings - pairs with Bootstrap's default body font
-           so hierarchy comes from typeface contrast, not just size/weight */
+        /* Display font for headings */
         .splash-title,
         .app-header h1,
         #infoModal .modal-body h2 {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-weight: 800;
-            letter-spacing: -0.02em;
+            letter-spacing: -0.025em;
         }
 
-        /* Splash Screen Styles */
+        /* Splash Screen - Carta Millimetrata & Archival Parchment */
         .splash-screen {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: #f7f4ed;
+            background-image:
+                linear-gradient(rgba(194, 65, 12, 0.045) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(194, 65, 12, 0.045) 1px, transparent 1px),
+                linear-gradient(rgba(194, 65, 12, 0.085) 1.5px, transparent 1.5px),
+                linear-gradient(90deg, rgba(194, 65, 12, 0.085) 1.5px, transparent 1.5px),
+                radial-gradient(circle at 50% 50%, rgba(251, 249, 245, 0.45) 0%, rgba(240, 232, 218, 0.9) 100%);
+            background-size: 16px 16px, 16px 16px, 80px 80px, 80px 80px, 100% 100%;
             z-index: 9999;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: #1c1917;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             transition: opacity 0.5s ease;
         }
 
@@ -52,80 +61,90 @@
 
         .splash-content {
             text-align: center;
-            max-width: 600px;
+            max-width: 520px;
+            width: 90%;
             padding: 40px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid #e8e3d8;
+            border-radius: 20px;
+            box-shadow: 0 12px 32px -4px rgba(120, 53, 15, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
         }
 
         .splash-logo {
-            max-width: 150px;
+            max-width: 105px;
             height: auto;
-            margin: 0 auto 20px;
-            animation: pulse 2s ease-in-out infinite;
+            margin: 0 auto 16px;
+            display: block;
+            filter: drop-shadow(0 4px 12px rgba(194, 65, 12, 0.15));
+            animation: splash-pulse 2.4s ease-in-out infinite;
         }
 
-        @keyframes pulse {
-
-            0%,
-            100% {
-                transform: scale(1);
-            }
-
-            50% {
-                transform: scale(1.05);
-            }
+        @keyframes splash-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.04); }
         }
 
         .splash-spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid white;
+            border: 3px solid rgba(194, 65, 12, 0.15);
+            border-top: 3px solid #c2410c;
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            width: 38px;
+            height: 38px;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto 16px;
         }
 
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .splash-title {
-            font-size: 2.5rem;
-            font-weight: bold;
-            margin-bottom: 1rem;
+            font-size: 2.1rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            color: #1c1917;
+            margin-bottom: 0.35rem;
+        }
+
+        .splash-accent {
+            color: #c2410c;
         }
 
         .splash-message {
-            font-size: 1.1rem;
-            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+            color: #57534e;
+            margin-bottom: 1.25rem;
         }
 
+        /* Mandated by PRODUCT.md: outer height 22px, padding 2.5px, radius 9999px, inner fill terracotta gradient with centered white percent */
         .splash-progress {
             width: 100%;
-            max-width: 500px;
-            margin: 20px auto;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
+            max-width: 420px;
+            margin: 18px auto 6px;
+            background: #e8e3d8;
+            border-radius: 9999px;
             overflow: hidden;
-            height: 30px;
+            height: 22px;
+            padding: 2.5px;
+            box-shadow: inset 0 1px 3px rgba(28, 25, 23, 0.12);
         }
 
         .splash-progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, #10b981, #3b82f6);
-            border-radius: 10px;
-            transition: width 0.3s ease;
+            background: linear-gradient(90deg, #c2410c, #ea580c);
+            border-radius: 9999px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.9rem;
-            font-weight: bold;
+            font-size: 0.76rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #ffffff;
+            letter-spacing: 0.03em;
+            transition: width 0.25s ease;
         }
 
         /* Pixel Assistant Styles */
@@ -140,25 +159,24 @@
         }
 
         .pixel-assistant-container:hover {
-            transform: scale(1.1);
+            transform: scale(1.08);
         }
 
-        /* Speech Bubble */
         .pixel-speech-bubble {
-            background: #fff;
-            color: #000;
-            padding: 6px 10px;
+            background: #ffffff;
+            color: #1c1917;
+            padding: 5px 9px;
             border-radius: 8px;
-            border: 2px solid #444;
-            font-weight: bold;
+            border: 1px solid #e8e3d8;
+            font-weight: 600;
             font-size: 11px;
-            font-family: 'Courier New', monospace;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             opacity: 0;
-            transform: translateX(10px);
-            transition: all 0.3s ease;
+            transform: translateX(8px);
+            transition: all 0.25s ease;
             white-space: nowrap;
-            box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.1);
-            margin-right: 5px;
+            box-shadow: 0 4px 10px rgba(120, 53, 15, 0.08);
+            margin-right: 4px;
         }
 
         .pixel-assistant-container:hover .pixel-speech-bubble {
@@ -166,7 +184,6 @@
             transform: translateX(0);
         }
 
-        /* Monitor and Face Animations */
         #pixel-face-idle {
             opacity: 1;
             visibility: visible;
@@ -180,7 +197,6 @@
             transition: opacity 0.3s ease-in-out, visibility 0.3s;
         }
 
-        /* Hover States for Face */
         .pixel-assistant-container:hover #pixel-face-idle {
             opacity: 0 !important;
             visibility: hidden;
@@ -193,12 +209,10 @@
             transition-delay: 0s;
         }
 
-        /* Screen Color Change on Hover */
         .pixel-assistant-container:hover #pixel-screen {
             fill: #002200;
         }
 
-        /* Monitor Wiggle/Scale Effect */
         .pixel-assistant-container svg {
             transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             transform-origin: center;
@@ -209,15 +223,8 @@
         }
 
         @keyframes pixel-breathe {
-
-            0%,
-            100% {
-                opacity: 0.7;
-            }
-
-            50% {
-                opacity: 0.4;
-            }
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 0.4; }
         }
     </style>
 </head>
@@ -229,8 +236,8 @@
             <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="PyPotteryLayout Logo"
                 class="splash-logo">
             <div class="splash-spinner"></div>
-            <h1 class="splash-title">PyPotteryLayout</h1>
-            <p class="splash-message" id="splash-message">Initializing application...</p>
+            <h1 class="splash-title">PyPottery <span class="splash-accent">Layout</span></h1>
+            <p class="splash-message" id="splash-message">Initializing publication plate workspace...</p>
 
             <div class="splash-progress">
                 <div class="splash-progress-bar" id="splash-progress-bar" style="width: 0%">
@@ -240,17 +247,18 @@
         </div>
     </div>
 
-    <div class="container-fluid p-0" id="main-container" style="display: none;">
-        <!-- Header -->
-        <header class="app-header">
+    <div id="main-container" style="display: none;">
+        <div class="app-container">
+            <!-- Header -->
+            <header class="app-header">
             <div class="logo-section">
                 <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="PyPotteryLayout Logo" class="logo">
-                <div>
-                    <h1>PyPotteryLayout</h1>
+                <div class="d-flex align-items-center">
+                    <h1>PyPottery<span class="brand-accent">Layout</span></h1>
                     <span class="version-badge">v{{ version }}</span>
                 </div>
             </div>
-            <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+            <div class="header-actions">
                 <a href="https://lrncrd.github.io/PyPottery/pypotterylayout/usage.html" target="_blank"
                     class="pixel-assistant-container" title="Need help?">
                     <div class="pixel-speech-bubble">Need help?</div>
@@ -284,40 +292,45 @@
                         </g>
                     </svg>
                 </a>
-                <button id="info-btn" class="btn btn-outline-light btn-sm" data-bs-toggle="modal"
+                <button id="info-btn" class="btn btn-sm" data-bs-toggle="modal"
                     data-bs-target="#infoModal">
-                    <i class="bi bi-info-circle"></i> Info
+                    <i class="bi bi-info-circle me-1"></i> Info
                 </button>
             </div>
         </header>
 
-        <!-- Main Content with Tabs -->
-        <div class="container-fluid mt-3">
-            <!-- Tab Navigation -->
-            <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic"
-                        type="button" role="tab">
-                        <i class="bi bi-sliders"></i> Basic Settings
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="advanced-tab" data-bs-toggle="tab" data-bs-target="#advanced"
-                        type="button" role="tab">
-                        <i class="bi bi-gear"></i> Advanced Settings
-                    </button>
-                </li>
-            </ul>
+        <!-- Main Content with 2-Column Split View -->
+        <div class="app-content">
+            <div class="row g-4">
+                <!-- Left Column: Settings, Inputs & Actions -->
+                <div class="col-lg-6">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-surface border-bottom d-flex align-items-center justify-content-between px-3 py-2" style="min-height: 52px;">
+                            <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="settingsTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic"
+                                        type="button" role="tab">
+                                        <i class="bi bi-sliders me-1"></i> Basic Settings
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="advanced-tab" data-bs-toggle="tab" data-bs-target="#advanced"
+                                        type="button" role="tab">
+                                        <i class="bi bi-gear me-1"></i> Advanced Settings
+                                    </button>
+                                </li>
+                            </ul>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle small fw-semibold d-none d-sm-inline-block">Settings</span>
+                        </div>
 
-            <div class="tab-content border border-top-0 p-3 bg-white" id="settingsTabContent">
-                <!-- BASIC TAB -->
-                <div class="tab-pane fade show active p-3 p-md-4" id="basic" role="tabpanel">
-                    <div class="row g-4">
-                        <!-- Input Files Column -->
-                        <div class="col-lg-6">
-                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                        <div class="card-body p-3 p-md-4">
+                            <div class="tab-content" id="settingsTabContent">
+                                <!-- BASIC TAB -->
+                                <div class="tab-pane fade show active" id="basic" role="tabpanel">
+                            <!-- Input Files Card -->
+                            <div class="basic-settings-card p-3 p-md-4 rounded-3 border bg-light-subtle shadow-sm mb-3">
                                 <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-                                    <div class="icon-shape bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <div class="icon-shape">
                                         <i class="bi bi-folder-fill fs-6"></i>
                                     </div>
                                     <h5 class="mb-0 fw-bold text-dark">Input Files</h5>
@@ -365,13 +378,11 @@
                                     <div id="metadataStatus" class="mt-2"></div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Layout Settings Column -->
-                        <div class="col-lg-6">
-                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                            <!-- Layout Configuration Card -->
+                            <div class="basic-settings-card p-3 p-md-4 rounded-3 border bg-light-subtle shadow-sm">
                                 <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-                                    <div class="icon-shape bg-indigo text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; background-color: #667eea;">
+                                    <div class="icon-shape">
                                         <i class="bi bi-grid-3x3-gap-fill fs-6"></i>
                                     </div>
                                     <h5 class="mb-0 fw-bold text-dark">Layout Configuration</h5>
@@ -442,32 +453,16 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Action Bar Container -->
-                    <div class="action-bar-container mt-4 pt-3 border-top d-flex flex-wrap justify-content-center align-items-center gap-3">
-                        <button class="btn btn-generate-primary btn-lg px-5 py-2-5 shadow-md fw-bold d-inline-flex align-items-center gap-2" id="generateBtn" disabled>
-                            <i class="bi bi-play-fill fs-5"></i>
-                            <span>Generate Layout</span>
-                        </button>
-                        <button class="btn btn-outline-danger px-4 py-2 d-inline-flex align-items-center gap-2 rounded-3" id="clearBtn">
-                            <i class="bi bi-trash3"></i>
-                            <span>Clear All</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- ADVANCED TAB -->
-                <div class="tab-pane fade p-3 p-md-4" id="advanced" role="tabpanel">
-                    <div class="row g-4">
-                        <!-- Column 1: Dimensions & Spacing -->
-                        <div class="col-lg-4 col-md-6">
-                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                        <!-- ADVANCED TAB -->
+                        <div class="tab-pane fade p-2 p-md-3" id="advanced" role="tabpanel">
+                            <!-- Card 1: Dimensions & Spacing -->
+                            <div class="basic-settings-card p-3 p-md-4 rounded-3 border bg-light-subtle shadow-sm mb-3">
                                 <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-                                    <div class="icon-shape bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <div class="icon-shape">
                                         <i class="bi bi-rulers fs-6"></i>
                                     </div>
-                                    <h5 class="mb-0 fw-bold text-dark">Dimensions</h5>
+                                    <h5 class="mb-0 fw-bold text-dark">Dimensions & Spacing</h5>
                                 </div>
 
                                 <!-- Scale Controls -->
@@ -499,18 +494,24 @@
                                 </div>
 
                                 <!-- Margins & Spacing -->
-                                <div class="row g-3 mb-3">
-                                    <div class="col-6">
-                                        <label for="marginPx" class="form-label fw-semibold text-dark mb-1">
+                                <div class="row g-2 g-sm-3 mb-3">
+                                    <div class="col-4">
+                                        <label for="marginPx" class="form-label fw-semibold text-dark mb-1 fs-7">
                                             <i class="bi bi-bounding-box-circles me-1 text-muted"></i> Margin (px)
                                         </label>
-                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="marginPx" value="50" min="0">
+                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="marginPx" value="50" min="0" step="5">
                                     </div>
-                                    <div class="col-6">
-                                        <label for="spacingPx" class="form-label fw-semibold text-dark mb-1">
+                                    <div class="col-4">
+                                        <label for="topSpacingPx" class="form-label fw-semibold text-dark mb-1 fs-7" title="Space between top border/page and first row of objects">
+                                            <i class="bi bi-arrow-bar-down me-1 text-primary"></i> Top Space (px)
+                                        </label>
+                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="topSpacingPx" value="40" min="0" step="5">
+                                    </div>
+                                    <div class="col-4">
+                                        <label for="spacingPx" class="form-label fw-semibold text-dark mb-1 fs-7">
                                             <i class="bi bi-arrows-angle-expand me-1 text-muted"></i> Spacing (px)
                                         </label>
-                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="spacingPx" value="10" min="0">
+                                        <input type="number" class="form-control border-secondary-subtle shadow-xs" id="spacingPx" value="10" min="0" step="2">
                                     </div>
                                 </div>
 
@@ -532,16 +533,14 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Column 2: Captions & Sorting -->
-                        <div class="col-lg-4 col-md-6">
-                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                            <!-- Card 2: Captions & Numbering -->
+                            <div class="basic-settings-card p-3 p-md-4 rounded-3 border bg-light-subtle shadow-sm mb-3">
                                 <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-                                    <div class="icon-shape bg-info text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <div class="icon-shape">
                                         <i class="bi bi-fonts fs-6"></i>
                                     </div>
-                                    <h5 class="mb-0 fw-bold text-dark">Captions & Sorting</h5>
+                                    <h5 class="mb-0 fw-bold text-dark">Captions & Numbering</h5>
                                 </div>
 
                                 <!-- Enable Captions Switch -->
@@ -602,7 +601,51 @@
                                     </div>
                                 </div>
 
-                                <!-- Sorting Controls -->
+                                <!-- Table Number Settings -->
+                                <div class="p-3 bg-white border rounded-3 shadow-xs">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="addTableNumber" checked>
+                                        <label class="form-check-label fw-bold text-dark ms-1" for="addTableNumber">Add Table Numbers</label>
+                                    </div>
+                                    <div id="tableNumberSettings" class="pt-2 border-top mt-2">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <label for="tablePrefix" class="form-label small text-muted mb-1">Prefix</label>
+                                                <input type="text" class="form-control form-control-sm border-secondary-subtle" id="tablePrefix" value="Tav.">
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="tableStartNumber" class="form-label small text-muted mb-1">Start #</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="tableStartNumber" value="1" min="1">
+                                            </div>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <label for="tableFontSize" class="form-label small text-muted mb-1">Font Size</label>
+                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="tableFontSize" value="18" min="10">
+                                            </div>
+                                            <div class="col-6">
+                                                <label for="tablePosition" class="form-label small text-muted mb-1">Position</label>
+                                                <select class="form-select form-select-sm border-secondary-subtle" id="tablePosition">
+                                                    <option value="top_left" selected>Top Left</option>
+                                                    <option value="top_right">Top Right</option>
+                                                    <option value="bottom_left">Bottom Left</option>
+                                                    <option value="bottom_right">Bottom Right</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card 3: Sorting & Grouping -->
+                            <div class="basic-settings-card p-3 p-md-4 rounded-3 border bg-light-subtle shadow-sm mb-3">
+                                <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                                    <div class="icon-shape">
+                                        <i class="bi bi-sort-alpha-down fs-6"></i>
+                                    </div>
+                                    <h5 class="mb-0 fw-bold text-dark">Sorting & Grouping</h5>
+                                </div>
+
                                 <div class="p-3 bg-white border rounded-3 shadow-xs">
                                     <div class="mb-2">
                                         <label for="sortBy" class="form-label fw-semibold text-dark mb-1">Primary Sort</label>
@@ -661,20 +704,17 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Column 3: Scale Bar & Tables -->
-                        <div class="col-lg-4 col-md-12">
-                            <div class="basic-settings-card h-100 p-4 rounded-3 border bg-light-subtle shadow-sm">
+                            <!-- Card 4: Scale Bar -->
+                            <div class="basic-settings-card p-3 p-md-4 rounded-3 border bg-light-subtle shadow-sm">
                                 <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-                                    <div class="icon-shape bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; background-color: #f59e0b !important;">
+                                    <div class="icon-shape">
                                         <i class="bi bi-sliders2-vertical fs-6"></i>
                                     </div>
-                                    <h5 class="mb-0 fw-bold text-dark">Scale Bar & Tables</h5>
+                                    <h5 class="mb-0 fw-bold text-dark">Scale Bar</h5>
                                 </div>
 
-                                <!-- Scale Bar Settings -->
-                                <div class="mb-4 p-3 bg-white border rounded-3 shadow-xs">
+                                <div class="p-3 bg-white border rounded-3 shadow-xs">
                                     <div class="form-check form-switch mb-2">
                                         <input class="form-check-input" type="checkbox" id="addScaleBar" checked>
                                         <label class="form-check-label fw-bold text-dark ms-1" for="addScaleBar">Add Scale Bar</label>
@@ -692,101 +732,90 @@
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- Table Number Settings -->
-                                <div class="p-3 bg-white border rounded-3 shadow-xs">
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="addTableNumber" checked>
-                                        <label class="form-check-label fw-bold text-dark ms-1" for="addTableNumber">Add Table Numbers</label>
-                                    </div>
-                                    <div id="tableNumberSettings" class="pt-2 border-top mt-2">
-                                        <div class="row g-2 mb-2">
-                                            <div class="col-6">
-                                                <label for="tablePrefix" class="form-label small text-muted mb-1">Prefix</label>
-                                                <input type="text" class="form-control form-control-sm border-secondary-subtle" id="tablePrefix" value="Tav.">
-                                            </div>
-                                            <div class="col-6">
-                                                <label for="tableStartNumber" class="form-label small text-muted mb-1">Start #</label>
-                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="tableStartNumber" value="1" min="1">
-                                            </div>
-                                        </div>
-                                        <div class="row g-2">
-                                            <div class="col-6">
-                                                <label for="tableFontSize" class="form-label small text-muted mb-1">Font Size</label>
-                                                <input type="number" class="form-control form-control-sm border-secondary-subtle" id="tableFontSize" value="18" min="10">
-                                            </div>
-                                            <div class="col-6">
-                                                <label for="tablePosition" class="form-label small text-muted mb-1">Position</label>
-                                                <select class="form-select form-select-sm border-secondary-subtle" id="tablePosition">
-                                                    <option value="top_left" selected>Top Left</option>
-                                                    <option value="top_right">Top Right</option>
-                                                    <option value="bottom_left">Bottom Left</option>
-                                                    <option value="bottom_right">Bottom Right</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Output Section -->
-            <div class="card mt-3">
-                <div class="card-header bg-secondary text-white">
-                    <h5 class="mb-0"><i class="bi bi-terminal"></i> Output & Preview</h5>
+                <!-- Action Bar inside Card Footer -->
+                <div class="card-footer bg-white border-top p-3 d-flex flex-wrap justify-content-center align-items-center gap-3">
+                    <button class="btn btn-generate-primary btn-lg px-5 py-2-5 shadow-md fw-bold d-inline-flex align-items-center gap-2" id="generateBtn" disabled>
+                        <i class="bi bi-play-fill fs-5"></i>
+                        <span>Generate Layout</span>
+                    </button>
+                    <button class="btn btn-outline-danger px-4 py-2 d-inline-flex align-items-center gap-2 rounded-3" id="clearBtn">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear All</span>
+                    </button>
                 </div>
-                <div class="card-body">
-                    <!-- Progress -->
-                    <div id="progressContainer" style="display: none;" class="mb-3">
-                        <div class="alert alert-info mb-2">
-                            <i class="bi bi-hourglass-split"></i> <span id="progressText">Processing...</span>
-                        </div>
-                        <div class="progress">
-                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                                role="progressbar" style="width: 0%"></div>
-                        </div>
-                    </div>
+            </div>
+        </div>
 
-                    <!-- Result -->
-                    <div id="resultSection" style="display: none;" class="mb-3">
-                        <div class="alert alert-success">
-                            <h6><i class="bi bi-check-circle"></i> Layout Generated Successfully!</h6>
-                            <p class="mb-2">File: <strong id="resultFilename"></strong></p>
-                            <p class="mb-0">Pages: <strong id="resultPages"></strong></p>
-                        </div>
-                        <div class="text-center">
-                            <a id="downloadBtn" href="#" class="btn btn-success btn-lg">
-                                <i class="bi bi-download"></i> Download File
-                            </a>
-                        </div>
-                    </div>
+        <!-- Right Column: Output & Live Preview Workspace (Sticky on Desktop) -->
+        <div class="col-lg-6">
+            <div class="card output-preview-card preview-column-sticky shadow-sm mb-4">
+                <div class="card-header bg-surface border-bottom d-flex align-items-center justify-content-between px-3 py-2" style="min-height: 52px;">
+                    <h5 class="mb-0 fw-bold d-flex align-items-center"><i class="bi bi-layout-three-columns me-2"></i> Output & Preview</h5>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-medium">Live Preview</span>
+                </div>
+                <div class="card-body p-3 p-md-4">
+                            <!-- Empty State Placeholder -->
+                            <div id="emptyStateSection" class="text-center py-5">
+                                <div class="mb-3 text-muted" style="opacity: 0.45;">
+                                    <i class="bi bi-layout-three-columns" style="font-size: 2.75rem;"></i>
+                                </div>
+                                <h6 class="fw-bold text-dark mb-1">No layout generated yet</h6>
+                                <p class="text-muted small mb-0">Upload ceramic drawings on the left and click <strong class="text-primary">Generate Layout</strong> to compile plates.</p>
+                            </div>
 
-                    <!-- Preview Section -->
-                    <div id="previewSection" style="display: none;" class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0"><i class="bi bi-eye"></i> Layout Preview</h6>
-                            <button id="updatePreviewBtn" class="btn btn-sm btn-outline-primary"
-                                onclick="generateLayoutPreview()">
-                                <i class="bi bi-arrow-clockwise"></i> Update Preview
-                            </button>
-                        </div>
-                        <div id="previewGrid">
-                            <!-- Preview will be added here by JavaScript -->
-                        </div>
-                    </div>
+                            <!-- Progress -->
+                            <div id="progressContainer" style="display: none;" class="mb-3">
+                                <div class="alert alert-info mb-2">
+                                    <i class="bi bi-hourglass-split"></i> <span id="progressText">Processing...</span>
+                                </div>
+                                <div class="progress" style="height: 12px; border-radius: var(--radius-full); background: #e8e3d8;">
+                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                        role="progressbar" style="width: 0%; background: linear-gradient(90deg, #c2410c, #ea580c); border-radius: var(--radius-full);"></div>
+                                </div>
+                            </div>
 
-                    <!-- Terminal -->
-                    <div class="card">
-                        <div class="card-header bg-dark text-white py-2">
-                            <small><i class="bi bi-terminal"></i> Terminal Log</small>
-                        </div>
-                        <div class="card-body bg-dark text-white p-2"
-                            style="height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
-                            <div id="terminalOutput">
-                                <p class="text-success mb-0">Ready to process images...</p>
+                            <!-- Error Alert -->
+                            <div id="errorSection" style="display: none;" class="mb-3">
+                                <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                                    <div>
+                                        <h6 class="fw-bold mb-1">Layout Generation Error</h6>
+                                        <p class="mb-0 small" id="errorMessage"></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Result -->
+                            <div id="resultSection" style="display: none;" class="mb-3">
+                                <div class="alert alert-success">
+                                    <h6 class="fw-bold"><i class="bi bi-check-circle me-1"></i> Layout Generated Successfully!</h6>
+                                    <p class="mb-2">File: <strong id="resultFilename"></strong></p>
+                                    <p class="mb-0">Pages: <strong id="resultPages"></strong></p>
+                                </div>
+                                <div class="text-center">
+                                    <a id="downloadBtn" href="#" class="btn btn-lg px-4 py-2-5 shadow-md">
+                                        <i class="bi bi-download me-1"></i> Download File
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Preview Section -->
+                            <div id="previewSection" style="display: none;" class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0 fw-bold"><i class="bi bi-eye me-1"></i> Layout Preview</h6>
+                                    <button id="updatePreviewBtn" class="btn btn-sm btn-outline-primary"
+                                        onclick="generateLayoutPreview()">
+                                        <i class="bi bi-arrow-clockwise me-1"></i> Update Preview
+                                    </button>
+                                </div>
+                                <div id="previewGrid">
+                                    <!-- Preview will be added here by JavaScript -->
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -794,36 +823,40 @@
             </div>
         </div>
     </div>
+</div>
 
     <!-- Info Modal -->
     <div class="modal fade" id="infoModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header" style="background: #f8f9fa; border-bottom: none;">
+                <div class="modal-header">
+                    <h5 class="modal-title fs-6"><i class="bi bi-info-circle me-1"></i> About PyPotteryLayout</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body" style="text-align: center; padding: 2rem 2rem 3rem 2rem;">
-                    <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="Logo"
-                        style="max-width: 120px; margin-bottom: 1.5rem;">
+                <div class="modal-body text-center p-4">
+                    <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="PyPotteryLayout Logo"
+                        style="max-width: 100px; margin-bottom: 1.25rem; filter: drop-shadow(0 2px 6px rgba(194,65,12,0.15));">
 
-                    <h2 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem; color: #000;">
-                        PyPotteryLayout</h2>
-                    <p style="font-size: 1.2rem; color: #666; margin-bottom: 1.5rem;">Version {{ version }}</p>
+                    <h2 style="font-family: var(--font-sans); font-size: 2rem; font-weight: 800; margin-bottom: 0.35rem; color: var(--text-main);">
+                        PyPottery<span class="brand-accent">Layout</span></h2>
+                    <p style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; color: var(--primary); margin-bottom: 1.25rem;">
+                        <span class="version-badge">Version {{ version }}</span>
+                    </p>
 
-                    <p style="font-size: 1rem; color: #333; margin-bottom: 1.5rem; line-height: 1.6;">
+                    <p style="font-size: 0.95rem; color: var(--text-dim); margin-bottom: 1.25rem; line-height: 1.6;">
                         Create archaeological artefacts tables effortlessly<br>
-                        with intelligent layout algorithms and export options.
+                        with intelligent layout algorithms and metric export options.
                     </p>
 
-                    <p style="font-size: 1rem; color: #000; margin-bottom: 0.3rem;">
-                        <strong>Authors: Lorenzo Cardarelli; Enzo Cocca</strong>
+                    <p style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.3rem;">
+                        <strong>Authors:</strong> Lorenzo Cardarelli; Enzo Cocca
                     </p>
 
-                    <p style="font-size: 0.95rem; color: #555; margin-bottom: 0.3rem;">
-                        GitHub Project:
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem;">
+                        GitHub Repository:
                     </p>
                     <a href="https://github.com/lrncrd/PyPotteryLayout" target="_blank"
-                        style="color: #0066cc; text-decoration: underline; font-size: 0.95rem;">
+                        style="color: var(--primary); font-weight: 600; text-decoration: underline; font-size: 0.9rem;">
                         https://github.com/lrncrd/PyPotteryLayout
                     </a>
                 </div>

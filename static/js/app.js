@@ -8,7 +8,7 @@ let metadataHeaders = [];
 // DOM Elements (will be initialized in DOMContentLoaded)
 let imageUpload, metadataUpload, generateBtn, clearBtn, terminalOutput;
 let uploadStatus, metadataStatus, progressContainer, progressBar, progressText;
-let resultSection, previewSection, scaleDisplay, scaleFactor;
+let resultSection, previewSection, errorSection, errorMessage, emptyStateSection, scaleDisplay, scaleFactor;
 let gridSettings, captionSettings, scaleBarSettings, tableNumberSettings, objectNumberSettings;
 
 // Splash Screen
@@ -19,6 +19,9 @@ document.addEventListener('DOMContentLoaded', function () {
     generateBtn = document.getElementById('generateBtn');
     clearBtn = document.getElementById('clearBtn');
     terminalOutput = document.getElementById('terminalOutput');
+    errorSection = document.getElementById('errorSection');
+    errorMessage = document.getElementById('errorMessage');
+    emptyStateSection = document.getElementById('emptyStateSection');
     uploadStatus = document.getElementById('uploadStatus');
     metadataStatus = document.getElementById('metadataStatus');
     progressContainer = document.getElementById('progressContainer');
@@ -41,9 +44,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const splashMessage = document.getElementById('splash-message');
 
     const loadingSteps = [
-        { progress: 20, message: 'Loading components...' },
-        { progress: 40, message: 'Initializing interface...' },
-        { progress: 60, message: 'Setting up controls...' },
+        { progress: 20, message: 'Loading layout engine...' },
+        { progress: 40, message: 'Initializing drafting grid...' },
+        { progress: 60, message: 'Setting up metric scaling controls...' },
         { progress: 80, message: 'Preparing workspace...' },
         { progress: 100, message: 'Ready!' }
     ];
@@ -198,45 +201,83 @@ function setupPreviewAutoUpdate() {
     function schedulePreviewUpdate() {
         if (!uploadedImages) return;
 
+        showPreviewUpdatingState();
         clearTimeout(previewTimeout);
         previewTimeout = setTimeout(() => {
             generateLayoutPreview();
-        }, 500); // Wait 500ms after last change
+        }, 400); // Wait 400ms after last change
     }
 
-    // Listen to all settings that affect layout
+    // Helper to attach multiple event types (e.g. input for typing/spinners and change for blur/selection)
+    function bindAutoUpdate(elId, events = ['input', 'change']) {
+        const el = document.getElementById(elId);
+        if (el) {
+            events.forEach(evt => el.addEventListener(evt, schedulePreviewUpdate));
+        }
+    }
+
+    // 1. Layout Mode & Page Structure
     document.querySelectorAll('input[name="mode"]').forEach(radio => {
         radio.addEventListener('change', schedulePreviewUpdate);
     });
+    bindAutoUpdate('pageSize', ['change']);
+    bindAutoUpdate('gridRows', ['input', 'change']);
+    bindAutoUpdate('gridCols', ['input', 'change']);
 
-    document.getElementById('pageSize').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('scaleFactor').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('scaleRatioA').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('scaleRatioB').addEventListener('input', schedulePreviewUpdate);
+    // 2. Scale Controls
     document.querySelectorAll('input[name="scaleInputMode"]').forEach(radio => {
         radio.addEventListener('change', schedulePreviewUpdate);
     });
-    document.getElementById('marginPx').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('spacingPx').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('gridRows').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('gridCols').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('sortBy').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('sortBySecondary').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('showMarginBorder').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('pageBreakOnPrimaryChange').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('showPrimarySortHeader').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('sortHeaderFontSize').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('verticalAlignment').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('dividerThickness').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('dividerWidth').addEventListener('input', schedulePreviewUpdate);
-    document.getElementById('addObjectNumber').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('objectNumberPosition').addEventListener('change', schedulePreviewUpdate);
-    document.getElementById('objectNumberFontSize').addEventListener('input', schedulePreviewUpdate);
+    bindAutoUpdate('scaleFactor', ['input', 'change']);
+    bindAutoUpdate('scaleRatioA', ['input', 'change']);
+    bindAutoUpdate('scaleRatioB', ['input', 'change']);
 
-    // Listen to primary break type radio buttons
+    // 3. Spacing & Dimensions
+    bindAutoUpdate('marginPx', ['input', 'change']);
+    bindAutoUpdate('topSpacingPx', ['input', 'change']);
+    bindAutoUpdate('spacingPx', ['input', 'change']);
+    bindAutoUpdate('verticalAlignment', ['change']);
+    bindAutoUpdate('showMarginBorder', ['change']);
+
+    // 4. Captions & Metadata
+    bindAutoUpdate('addCaption', ['change']);
+    bindAutoUpdate('captionFontSize', ['input', 'change']);
+    bindAutoUpdate('captionPadding', ['input', 'change']);
+    bindAutoUpdate('removeExtension', ['change']);
+    bindAutoUpdate('hideFieldNames', ['change']);
+    const metaContainer = document.getElementById('metadataFieldsCheckboxes');
+    if (metaContainer) {
+        metaContainer.addEventListener('change', schedulePreviewUpdate);
+    }
+
+    // 5. Object Numbering
+    bindAutoUpdate('addObjectNumber', ['change']);
+    bindAutoUpdate('objectNumberPosition', ['change']);
+    bindAutoUpdate('objectNumberFontSize', ['input', 'change']);
+
+    // 6. Table Numbers
+    bindAutoUpdate('addTableNumber', ['change']);
+    bindAutoUpdate('tablePrefix', ['input', 'change']);
+    bindAutoUpdate('tableStartNumber', ['input', 'change']);
+    bindAutoUpdate('tableFontSize', ['input', 'change']);
+    bindAutoUpdate('tablePosition', ['change']);
+
+    // 7. Sorting & Grouping
+    bindAutoUpdate('sortBy', ['change']);
+    bindAutoUpdate('sortBySecondary', ['change']);
+    bindAutoUpdate('showPrimarySortHeader', ['change']);
+    bindAutoUpdate('sortHeaderFontSize', ['input', 'change']);
+    bindAutoUpdate('pageBreakOnPrimaryChange', ['change']);
     document.querySelectorAll('input[name="primaryBreakType"]').forEach(radio => {
         radio.addEventListener('change', schedulePreviewUpdate);
     });
+    bindAutoUpdate('dividerThickness', ['input', 'change']);
+    bindAutoUpdate('dividerWidth', ['input', 'change']);
+
+    // 8. Scale Bar
+    bindAutoUpdate('addScaleBar', ['change']);
+    bindAutoUpdate('scaleBarCm', ['input', 'change']);
+    bindAutoUpdate('pixelsPerCm', ['input', 'change']);
 }
 
 function handleModeChange(e) {
@@ -345,6 +386,52 @@ async function handleImageUpload(e) {
     }
 }
 
+function showPreviewUpdatingState() {
+    const previewGrid = document.getElementById('previewGrid');
+    const updateBtn = document.getElementById('updatePreviewBtn');
+    if (previewGrid) {
+        previewGrid.classList.add('preview-is-updating');
+        let indicator = document.getElementById('previewUpdatingOverlay');
+        if (!indicator && previewGrid.querySelector('.preview-paper-wrapper')) {
+            indicator = document.createElement('div');
+            indicator.id = 'previewUpdatingOverlay';
+            indicator.className = 'preview-updating-overlay fade-in';
+            indicator.innerHTML = `
+                <div class="preview-spinner-pill">
+                    <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                    <span>Updating preview...</span>
+                </div>
+            `;
+            const wrapper = previewGrid.querySelector('.preview-paper-wrapper');
+            if (wrapper) {
+                wrapper.appendChild(indicator);
+            } else {
+                previewGrid.appendChild(indicator);
+            }
+        }
+    }
+    if (updateBtn) {
+        const icon = updateBtn.querySelector('i');
+        if (icon) icon.classList.add('spin-icon');
+    }
+}
+
+function hidePreviewUpdatingState() {
+    const previewGrid = document.getElementById('previewGrid');
+    const updateBtn = document.getElementById('updatePreviewBtn');
+    const indicator = document.getElementById('previewUpdatingOverlay');
+    if (indicator) {
+        indicator.remove();
+    }
+    if (previewGrid) {
+        previewGrid.classList.remove('preview-is-updating');
+    }
+    if (updateBtn) {
+        const icon = updateBtn.querySelector('i');
+        if (icon) icon.classList.remove('spin-icon');
+    }
+}
+
 async function generateLayoutPreview() {
     const previewSection = document.getElementById('previewSection');
     const previewGrid = document.getElementById('previewGrid');
@@ -353,6 +440,8 @@ async function generateLayoutPreview() {
         previewSection.style.display = 'none';
         return;
     }
+
+    showPreviewUpdatingState();
 
     try {
         logTerminal('Generating layout preview...', 'info');
@@ -371,6 +460,7 @@ async function generateLayoutPreview() {
             sortBySecondary: document.getElementById('sortBySecondary').value,
             scaleFactor: getResolvedScaleFactor(),
             marginPx: document.getElementById('marginPx').value,
+            topSpacingPx: document.getElementById('topSpacingPx').value,
             spacingPx: document.getElementById('spacingPx').value,
             gridRows: document.getElementById('gridRows').value,
             gridCols: document.getElementById('gridCols').value,
@@ -450,6 +540,7 @@ async function generateLayoutPreview() {
                 </div>
             `;
             previewSection.style.display = 'block';
+            if (emptyStateSection) emptyStateSection.style.display = 'none';
 
             if (data.is_preview_limited) {
                 logTerminal(`Preview generated (limited to ${data.total_images}/${data.total_images_in_dataset} images): ${data.total_pages} page(s)`, 'warning');
@@ -463,6 +554,11 @@ async function generateLayoutPreview() {
     } catch (error) {
         logTerminal(`Preview error: ${error.message}`, 'error');
         previewSection.style.display = 'none';
+        if (emptyStateSection && (!resultSection || resultSection.style.display === 'none')) {
+            emptyStateSection.style.display = 'block';
+        }
+    } finally {
+        hidePreviewUpdatingState();
     }
 }
 
@@ -514,12 +610,15 @@ async function handleMetadataUpload(e) {
 async function handleGenerate() {
     if (!uploadedImages) {
         logTerminal('Please upload images first!', 'error');
+        showError('Please upload images first before generating layout!');
         return;
     }
 
+    hideError();
     logTerminal('Starting layout generation...', 'info');
     showProgress('Generating layout...');
-    resultSection.style.display = 'none';
+    if (resultSection) resultSection.style.display = 'none';
+    if (emptyStateSection) emptyStateSection.style.display = 'none';
 
     // Collect selected metadata fields
     const selectedMetadataFields = [];
@@ -533,6 +632,7 @@ async function handleGenerate() {
         page_size: document.getElementById('pageSize').value,
         scale_factor: getResolvedScaleFactor(),
         margin_px: parseInt(document.getElementById('marginPx').value),
+        top_spacing_px: parseInt(document.getElementById('topSpacingPx').value) || 0,
         spacing_px: parseInt(document.getElementById('spacingPx').value),
         grid_rows: parseInt(document.getElementById('gridRows').value),
         grid_cols: parseInt(document.getElementById('gridCols').value),
@@ -580,7 +680,7 @@ async function handleGenerate() {
         const data = await response.json();
 
         if (data.success) {
-            logTerminal(`✓ Layout generated successfully!`, 'success');
+            logTerminal(`[OK] Layout generated successfully!`, 'success');
             logTerminal(`  File: ${data.filename}`, 'success');
             logTerminal(`  Pages: ${data.pages}`, 'success');
 
@@ -588,13 +688,23 @@ async function handleGenerate() {
             document.getElementById('resultFilename').textContent = data.filename;
             document.getElementById('resultPages').textContent = data.pages;
             document.getElementById('downloadBtn').href = data.download_url;
+            if (emptyStateSection) emptyStateSection.style.display = 'none';
+            if (errorSection) errorSection.style.display = 'none';
             resultSection.style.display = 'block';
             resultSection.classList.add('fade-in');
         } else {
-            logTerminal(`✗ Generation failed: ${data.error}`, 'error');
+            logTerminal(`[ERROR] Generation failed: ${data.error}`, 'error');
+            showError(data.error || 'Failed to generate layout.');
+            if (emptyStateSection && (!resultSection || resultSection.style.display === 'none')) {
+                emptyStateSection.style.display = 'block';
+            }
         }
     } catch (error) {
-        logTerminal(`✗ Error: ${error.message}`, 'error');
+        logTerminal(`[ERROR] Error: ${error.message}`, 'error');
+        showError(`Generation error: ${error.message}`);
+        if (emptyStateSection && (!resultSection || resultSection.style.display === 'none')) {
+            emptyStateSection.style.display = 'block';
+        }
     } finally {
         hideProgress();
     }
@@ -617,8 +727,10 @@ async function handleClear() {
         metadataUpload.value = '';
         uploadStatus.innerHTML = '';
         metadataStatus.innerHTML = '';
-        resultSection.style.display = 'none';
-        previewSection.style.display = 'none';
+        if (resultSection) resultSection.style.display = 'none';
+        if (previewSection) previewSection.style.display = 'none';
+        hideError();
+        if (emptyStateSection) emptyStateSection.style.display = 'block';
 
         // Clear preview grid
         const previewGrid = document.getElementById('previewGrid');
@@ -630,13 +742,16 @@ async function handleClear() {
         uploadedMetadata = false;
         metadataHeaders = [];
 
-        // Clear terminal
-        terminalOutput.innerHTML = '<p class="text-success">Ready to process images...</p>';
+        // Clear terminal if it exists
+        if (terminalOutput) {
+            terminalOutput.innerHTML = '<p class="text-success">[READY] Ready to process images...</p>';
+        }
 
         updateUIState();
         logTerminal('Session cleared', 'success');
     } catch (error) {
         logTerminal(`Error clearing session: ${error.message}`, 'error');
+        showError(`Error clearing session: ${error.message}`);
     }
 }
 
@@ -798,6 +913,9 @@ function hideUploadOverlay() {
 }
 
 function logTerminal(message, type = 'info') {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    if (!terminalOutput) return;
+
     const p = document.createElement('p');
 
     switch (type) {
@@ -823,12 +941,28 @@ function logTerminal(message, type = 'info') {
     terminalOutput.scrollTop = terminalOutput.scrollHeight;
 }
 
-// Drag and drop support
-const dropZone = document.querySelector('.card-body');
+function showError(message) {
+    if (errorMessage && errorSection) {
+        errorMessage.textContent = message;
+        errorSection.style.display = 'block';
+        errorSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+        alert(message);
+    }
+}
 
-if (dropZone) {
+function hideError() {
+    if (errorSection) {
+        errorSection.style.display = 'none';
+    }
+}
+
+// Drag and drop support
+const dropZones = document.querySelectorAll('.file-upload-box, .basic-settings-card');
+
+dropZones.forEach(zone => {
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, preventDefaults, false);
+        zone.addEventListener(eventName, preventDefaults, false);
     });
 
     function preventDefaults(e) {
@@ -837,38 +971,28 @@ if (dropZone) {
     }
 
     ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, highlight, false);
+        zone.addEventListener(eventName, () => zone.classList.add('border-primary'), false);
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, unhighlight, false);
+        zone.addEventListener(eventName, () => zone.classList.remove('border-primary'), false);
     });
 
-    function highlight(e) {
-        dropZone.classList.add('border-primary');
-    }
-
-    function unhighlight(e) {
-        dropZone.classList.remove('border-primary');
-    }
-
-    dropZone.addEventListener('drop', handleDrop, false);
+    zone.addEventListener('drop', handleDrop, false);
 
     function handleDrop(e) {
         const dt = e.dataTransfer;
         const files = dt.files;
 
-        if (files.length > 0) {
-            // Check if files are images
+        if (files && files.length > 0) {
             const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-
             if (imageFiles.length > 0) {
                 imageUpload.files = dt.files;
                 handleImageUpload({ target: { files: dt.files } });
             }
         }
     }
-}
+});
 
 // Preview modal functions
 function openPreviewModal(imageUrl, pageNumber) {
