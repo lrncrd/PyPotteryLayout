@@ -292,7 +292,7 @@
                         </g>
                     </svg>
                 </a>
-                <button id="info-btn" class="btn btn-sm" data-bs-toggle="modal"
+                <button id="info-btn" class="header-info-btn" data-bs-toggle="modal"
                     data-bs-target="#infoModal">
                     <i class="bi bi-info-circle me-1"></i> Info
                 </button>
@@ -825,40 +825,69 @@
     </div>
 </div>
 
-    <!-- Info Modal -->
-    <div class="modal fade" id="infoModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title fs-6"><i class="bi bi-info-circle me-1"></i> About PyPotteryLayout</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <!-- Info Modal (macOS Minimal Centered Sheet) -->
+    <div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 500px;">
+            <div class="modal-content mac-window border-0">
+                <!-- Titlebar without traffic lights, minimal close on top-right -->
+                <div class="mac-titlebar">
+                    <span class="mac-window-title" id="infoModalLabel">About PyPotteryLayout</span>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body text-center p-4">
-                    <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="PyPotteryLayout Logo"
-                        style="max-width: 100px; margin-bottom: 1.25rem; filter: drop-shadow(0 2px 6px rgba(194,65,12,0.15));">
+                
+                <div class="mac-v-body">
+                    <!-- Logo (free-standing, prominent) -->
+                    <img src="{{ url_for('static', filename='LogoLayout.png') }}" alt="PyPotteryLayout Logo" class="modal-logo-free">
 
-                    <h2 style="font-family: var(--font-sans); font-size: 2rem; font-weight: 800; margin-bottom: 0.35rem; color: var(--text-main);">
-                        PyPottery<span class="brand-accent">Layout</span></h2>
-                    <p style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; color: var(--primary); margin-bottom: 1.25rem;">
-                        <span class="version-badge">Version {{ version }}</span>
+                    <!-- Title -->
+                    <h2 class="mac-v-title">
+                        PyPottery<span class="brand-accent">Layout</span>
+                    </h2>
+
+                    <!-- Clean Meta Line -->
+                    <div class="mac-v-meta">
+                        Version {{ version }} • By <strong class="text-dark">Lorenzo Cardarelli</strong>
+                    </div>
+
+                    <!-- Description -->
+                    <p class="mac-v-desc">
+                        Automated generation of publication plates with metric scaling and export to PDF and SVG.
                     </p>
 
-                    <p style="font-size: 0.95rem; color: var(--text-dim); margin-bottom: 1.25rem; line-height: 1.6;">
-                        Create archaeological artefacts tables effortlessly<br>
-                        with intelligent layout algorithms and metric export options.
-                    </p>
+                    <!-- Hardware Chip Pill -->
+                    <div>
+                        <div class="mac-v-chip" id="modalHardwareChip">
+                            <span id="systemCPU"><i class="bi bi-cpu me-1"></i> Detecting...</span>
+                            <span class="chip-sep">•</span>
+                            <span id="systemGPU" class="chip-active"><i class="bi bi-gpu-card me-1"></i> Detecting...</span>
+                        </div>
+                    </div>
 
-                    <p style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.3rem;">
-                        <strong>Authors:</strong> Lorenzo Cardarelli; Enzo Cocca
-                    </p>
+                    <!-- Minimal Citation Callout -->
+                    <div class="mac-citation-strip mb-3">
+                        <div class="mac-citation-header">
+                            <span class="mac-citation-tag"><i class="bi bi-quote"></i> Citation</span>
+                            <button type="button" class="mac-copy-link" onclick="copyCitation('citation-text', this)">
+                                <i class="bi bi-clipboard"></i> Copy
+                            </button>
+                        </div>
+                        <p class="mac-citation-quote" id="citation-text">
+                            "This research utilized PyPotteryLayout (version {{ version }}) for automated ceramic publication plate synthesis. Developed by Lorenzo Cardarelli (https://github.com/lrncrd/PyPotteryLayout)."
+                        </p>
+                    </div>
 
-                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem;">
-                        GitHub Repository:
-                    </p>
-                    <a href="https://github.com/lrncrd/PyPotteryLayout" target="_blank"
-                        style="color: var(--primary); font-weight: 600; text-decoration: underline; font-size: 0.9rem;">
-                        https://github.com/lrncrd/PyPotteryLayout
-                    </a>
+                    <!-- Apple-style Pill Action Buttons -->
+                    <div class="mac-v-actions">
+                        <a href="https://lrncrd.github.io/PyPottery/pypotterylayout/usage.html" target="_blank" class="mac-pill">
+                            <i class="bi bi-book"></i> Documentation
+                        </a>
+                        <a href="https://github.com/lrncrd/PyPotteryLayout" target="_blank" class="mac-pill">
+                            <i class="bi bi-github"></i> GitHub
+                        </a>
+                        <a href="https://ko-fi.com/lrncrd" target="_blank" class="mac-pill">
+                            <i class="bi bi-cup-hot"></i> Support
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1006,3 +1006,128 @@ function openPreviewModal(imageUrl, pageNumber) {
     const bsModal = new bootstrap.Modal(modal);
     bsModal.show();
 }
+
+// System Hardware Info & Citation Helper
+window.copyCitation = function (elementId, btnElement) {
+    const textEl = document.getElementById(elementId);
+    if (!textEl) return;
+    const text = textEl.innerText.replace(/^"|"$/g, '').trim();
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = btnElement || (window.event && window.event.target ? window.event.target.closest('.mac-copy-link') : null) || document.querySelector('.mac-copy-link');
+        if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.innerHTML = orig;
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    }).catch(err => {
+        console.error('Failed to copy citation:', err);
+    });
+};
+
+function fetchSystemInfo() {
+    const cpuEl = document.getElementById('systemCPU');
+    const gpuEl = document.getElementById('systemGPU');
+    if (!cpuEl || !gpuEl) return;
+
+    fetch('/api/system-info')
+        .then(res => res.json())
+        .then(data => {
+            const cores = (data.cpu && data.cpu.cores) || data.cpu_count || 1;
+            const platform = (data.cpu && data.cpu.platform) || data.platform || '';
+            cpuEl.innerHTML = `<i class="bi bi-cpu me-1"></i> ${cores} Cores${platform ? ` (${platform})` : ''}`;
+
+            const cuda = (data.gpu && data.gpu.cuda_available) || data.cuda_available;
+            const gpuNames = (data.gpu && data.gpu.gpu_names) || (data.cuda_device_name ? [data.cuda_device_name] : []);
+            const mps = (data.mps && data.mps.mps_available) || data.mps_available;
+
+            if (cuda) {
+                const name = gpuNames.length > 0 ? gpuNames[0] : 'NVIDIA CUDA';
+                gpuEl.innerHTML = `<i class="bi bi-gpu-card me-1"></i> ${name} (CUDA)`;
+                gpuEl.className = 'chip-active';
+            } else if (mps) {
+                gpuEl.innerHTML = `<i class="bi bi-gpu-card me-1"></i> Apple Silicon (MPS)`;
+                gpuEl.className = 'chip-active';
+            } else {
+                gpuEl.innerHTML = `<i class="bi bi-gpu-card me-1"></i> CPU Only`;
+                gpuEl.className = 'chip-cpu-only';
+            }
+        })
+        .catch(err => {
+            console.error('Failed to load system info:', err);
+            cpuEl.innerHTML = '<i class="bi bi-cpu me-1"></i> Available';
+            gpuEl.innerHTML = '<i class="bi bi-gpu-card me-1"></i> CPU Only';
+            gpuEl.className = 'chip-cpu-only';
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const infoModalEl = document.getElementById('infoModal');
+    if (infoModalEl) {
+        infoModalEl.addEventListener('show.bs.modal', fetchSystemInfo);
+    }
+});
+
+// ==========================================
+// Auto-Shutdown Heartbeat & Beacon System
+// ==========================================
+(function initAutoShutdownBeacon() {
+    const tabSessionId = 'tab_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+    const HEARTBEAT_INTERVAL_MS = 2500;
+
+    function sendHeartbeat() {
+        fetch('/api/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tab_id: tabSessionId }),
+            keepalive: true
+        }).catch(() => {});
+    }
+
+    // Ping iniziale immediato
+    sendHeartbeat();
+
+    // Ping periodico
+    const intervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+
+    // Re-ping al ritorno del focus sulla scheda
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') sendHeartbeat();
+    });
+    window.addEventListener('focus', sendHeartbeat);
+
+    // 1. Finestra di conferma alla chiusura della scheda o del browser
+    window.addEventListener('beforeunload', (e) => {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+    });
+
+    // 2. Invio del beacon SOLO quando l'utente ha effettivamente confermato l'uscita
+    let beaconSent = false;
+    function sendShutdownBeacon() {
+        if (beaconSent) return;
+        beaconSent = true;
+        clearInterval(intervalId);
+        const payload = JSON.stringify({ tab_id: tabSessionId });
+
+        if (navigator.sendBeacon) {
+            const blob = new Blob([payload], { type: 'application/json' });
+            navigator.sendBeacon('/api/beacon_shutdown', blob);
+        } else {
+            fetch('/api/beacon_shutdown', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+        }
+    }
+
+    window.addEventListener('pagehide', sendShutdownBeacon);
+    window.addEventListener('unload', sendShutdownBeacon);
+})();
+
