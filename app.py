@@ -490,9 +490,7 @@ def preview():
         if not image_data:
             return jsonify({'error': 'No valid images found'}), 400
         
-        # Limit to first 25 images for preview
         total_images_count = len(image_data)
-        image_data = image_data[:25]
         
         # Load metadata
         metadata_files = [f for f in os.listdir(session_folder) if f.startswith('metadata_')]
@@ -501,10 +499,13 @@ def preview():
             metadata_path = os.path.join(session_folder, metadata_files[0])
             metadata = backend_logic.load_metadata(metadata_path)
         
-        # Sort images
+        # Sort all the images, then keep the first 25 for the preview, so that it shows
+        # the beginning of the real (sorted) output and not the first 25 file names
         image_data = backend_logic.sort_images_hierarchical(
-            image_data, sort_by, sort_by_secondary, metadata
+            image_data, sort_by, sort_by_secondary, metadata,
+            seed=data.get('randomSeed')
         )
+        image_data = image_data[:25]
         
         # Primary sort key function (used for page-break/grouping comparisons)
         def get_primary_sort_value(img_data):
@@ -607,7 +608,15 @@ def preview():
             return jsonify({'error': 'Failed to generate layout'}), 500
         
         # Process PIL pages for preview (add overlays)
-        num_preview_pages = min(20, len(pil_pages))
+        # Only page 1 is shown in the interface: render just that one, and drop the
+        # previews of the previous settings instead of piling them up in outputs/
+        num_preview_pages = 1
+        for old_name in os.listdir(output_folder):
+            if old_name.startswith('preview_page') and old_name.endswith('.jpg'):
+                try:
+                    os.remove(os.path.join(output_folder, old_name))
+                except OSError:
+                    pass
         preview_urls = []
         
         for page_idx in range(num_preview_pages):
@@ -666,7 +675,7 @@ def preview():
             'preview_urls': preview_urls,
             'total_images': len(image_data),
             'total_images_in_dataset': total_images_count,
-            'is_preview_limited': total_images_count > 100,
+            'is_preview_limited': total_images_count > len(image_data),
             'total_pages': len(pil_pages)
         })
         
@@ -732,7 +741,8 @@ def generate_layout():
         
         # Sort
         image_data = backend_logic.sort_images_hierarchical(
-            image_data, sort_by, sort_by_secondary, metadata
+            image_data, sort_by, sort_by_secondary, metadata,
+            seed=data.get('random_seed')
         )
         
         # Sort key logic (used for page-break/grouping comparisons)
@@ -1037,4 +1047,4 @@ if __name__ == '__main__':
 
         print(f"PyPotteryLayout is starting...")
         print(f"Opening browser at {URL}")
-        app.run(debug=True, host='0.0.0.0', port=PORT, use_reloader=False)
+        app.run(debug=False, host='127.0.0.1', port=PORT, use_reloader=False)

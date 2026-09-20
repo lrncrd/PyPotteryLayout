@@ -13,17 +13,30 @@ import base64
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import rectpack
+from werkzeug.utils import secure_filename
 import openpyxl
 
+_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.gif')
+
+
 def normalize_match_key(value):
-    """Normalize a filename or metadata id for matching: drop the extension
-    (if any), strip surrounding whitespace, and lowercase. Applied to both
-    sides of the image<->metadata lookup so 'Ciao.png' matches an id of
-    'Ciao', 'ciao', or 'Ciao.png' alike, instead of requiring an exact,
-    case-sensitive, extension-included match."""
+    """Normalize a filename or metadata id for matching: drop an image extension
+    (if any), strip surrounding whitespace, sanitize like an uploaded filename, and
+    lowercase. Applied to both sides of the image<->metadata lookup so 'Ciao.png'
+    matches an id of 'Ciao', 'ciao', or 'Ciao.png' alike.
+
+    Only real image extensions are dropped, so an id such as 'US.12' keeps its
+    '.12'. Uploaded images are renamed with secure_filename ('Bowl 01.png' is
+    stored as 'Bowl_01.png'); the same sanitizing is applied to the metadata id so
+    'Bowl 01' still finds its image."""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)  # Excel numeric ids: 12.0 -> '12'
     text = str(value).strip()
-    stem = os.path.splitext(text)[0]
-    return stem.lower()
+    stem, ext = os.path.splitext(text)
+    if ext.lower() in _IMAGE_EXTENSIONS:
+        text = stem
+    text = secure_filename(text) or text
+    return text.lower()
 
 
 # Default page sizes in pixels (300 DPI approximations)
@@ -199,7 +212,7 @@ def load_metadata(filepath, status_callback=print):
 
 def load_images_with_info(folder_path, status_callback=print):
     image_data = []
-    supported_formats = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')
+    supported_formats = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tif', '.tiff')
     status_callback(f"Loading images from: {folder_path}...")
     if not os.path.isdir(folder_path):
         raise FileNotFoundError(f"'{folder_path}' does not exist.")
@@ -223,14 +236,16 @@ def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
 
-def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback=print):
+def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata, status_callback=print, seed=None):
     if not image_data: return image_data
+    # A seed makes 'random' reproducible, so the preview and the export show the same order
+    rng = random.Random(seed)
     if not primary_sort or primary_sort in ['', 'alphabetical']: primary_sort = 'alphabetical'
     
     status_callback(f"Sorting: '{primary_sort}' -> '{secondary_sort}'...")
     
     def get_sort_key(img_data, sort_field):
-        if sort_field == 'random': return (0, random.random(), '')
+        if sort_field == 'random': return (0, rng.random(), '')
         elif sort_field == 'natural_name': return (2, 0, natural_sort_key(img_data['name']))
         elif sort_field == 'alphabetical': return (2, 0, img_data['name'].lower())
         else:
@@ -243,7 +258,7 @@ def sort_images_hierarchical(image_data, primary_sort, secondary_sort, metadata,
             return (2, 0, 'zzz_no_metadata')
 
     if primary_sort == 'random' and (not secondary_sort or secondary_sort == 'none'):
-        random.shuffle(image_data)
+        rng.shuffle(image_data)
     else:
         def composite_sort_key(img_data):
             p_key = get_sort_key(img_data, primary_sort)
@@ -341,7 +356,8 @@ def add_captions_to_images(image_data, metadata, font_size, caption_padding, rem
         
         img_metadata = metadata.get(normalize_match_key(data['name'])) if metadata else None
         if img_metadata:
-            fields_to_use = selected_fields if selected_fields else img_metadata.keys()
+            # None = not specified (all fields); an empty list = the user unticked every field
+            fields_to_use = selected_fields if selected_fields is not None else img_metadata.keys()
             for key in fields_to_use:
                 val = img_metadata.get(key)
                 if val is not None:
@@ -361,7 +377,11 @@ def add_captions_to_images(image_data, metadata, font_size, caption_padding, rem
         # 3. Create Raster Image (Preview/JPG output)
         captioned_img = Image.new('RGB', (new_width, new_height), 'white')
         img_paste_x = (new_width - original_img.width) // 2
-        captioned_img.paste(original_img, (img_paste_x, 0))
+        if original_img.mode in ('RGBA', 'LA'):
+            # Transparent drawings keep a white background instead of the (often black) RGB behind the alpha
+            captioned_img.paste(original_img, (img_paste_x, 0), original_img.convert('RGBA'))
+        else:
+            captioned_img.paste(original_img, (img_paste_x, 0))
         
         draw = ImageDraw.Draw(captioned_img)
         text_x = (new_width - text_width) // 2

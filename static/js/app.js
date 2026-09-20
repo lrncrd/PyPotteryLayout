@@ -8,6 +8,9 @@ let metadataHeaders = [];
 // DOM Elements (will be initialized in DOMContentLoaded)
 let imageUpload, metadataUpload, generateBtn, clearBtn, terminalOutput;
 let uploadStatus, metadataStatus, progressContainer, progressBar, progressText;
+// Seed for the "Random" sort: the same for the preview and the export, re-rolled on demand
+let randomSeed = Math.floor(Math.random() * 2147483647);
+
 let resultSection, previewSection, errorSection, errorMessage, emptyStateSection, scaleDisplay, scaleFactor;
 let gridSettings, captionSettings, scaleBarSettings, tableNumberSettings, objectNumberSettings;
 
@@ -157,6 +160,9 @@ function setupEventListeners() {
 
     // Sort by metadata
     document.getElementById('sortBy').addEventListener('change', updateSortOptions);
+    document.getElementById('sortBy').addEventListener('change', function () {
+        randomSeed = Math.floor(Math.random() * 2147483647);
+    });
 
     // Metadata upload triggers sort option update
     metadataUpload.addEventListener('change', updateSortOptions);
@@ -457,6 +463,7 @@ async function generateLayoutPreview() {
             mode: document.querySelector('input[name="mode"]:checked').value,
             pageSize: document.getElementById('pageSize').value,
             sortBy: document.getElementById('sortBy').value,
+            randomSeed: randomSeed,
             sortBySecondary: document.getElementById('sortBySecondary').value,
             scaleFactor: getResolvedScaleFactor(),
             marginPx: document.getElementById('marginPx').value,
@@ -652,6 +659,7 @@ async function handleGenerate() {
         table_font_size: parseInt(document.getElementById('tableFontSize').value),
         table_prefix: document.getElementById('tablePrefix').value,
         sort_by: document.getElementById('sortBy').value,
+        random_seed: randomSeed,
         sort_by_secondary: document.getElementById('sortBySecondary').value,
         show_margin_border: document.getElementById('showMarginBorder').checked,
         page_break_on_primary_change: document.getElementById('pageBreakOnPrimaryChange').checked,
