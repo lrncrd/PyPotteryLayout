@@ -5,10 +5,3 @@ rectpack
 # Flask web framework
 Flask
 Werkzeug
-
-# Optional dependencies for enhanced functionality
-reportlab
-cairosvg
-
-# Development and testing
-pytest

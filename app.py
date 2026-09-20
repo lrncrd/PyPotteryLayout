@@ -67,7 +67,8 @@ def get_base_path():
 BASE_PATH = get_base_path()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+# Signs the session cookie that maps a browser to its upload folder: random at every start unless SECRET_KEY is set
+app.secret_key = os.environ.get('SECRET_KEY') or os.urandom(24)
 app.config['UPLOAD_FOLDER'] = os.path.join(BASE_PATH, 'uploads')
 app.config['OUTPUT_FOLDER'] = os.path.join(BASE_PATH, 'outputs')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
