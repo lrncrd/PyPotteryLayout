@@ -65,7 +65,7 @@ python app.py
 
 ## 📋 System Requirements
 
-- **Python**: 3.11+
+- **Python**: 3.12 (tested)
 - **Operating System**: Windows/macOS/Linux
 - **Memory**: 2GB+ RAM recommended for large image sets
 - **Dependencies**: See `requirements.txt` (Flask, Pillow, openpyxl, rectpack)
@@ -73,7 +73,7 @@ python app.py
 ## 🎯 Usage
 
 1. **Upload Images**: Drag & drop or select pottery images
-2. **Add Metadata** (optional): Upload an Excel/CSV file with captions and sorting fields — first column must be the image filename
+2. **Add Metadata** (optional): Upload an Excel/CSV file with captions and sorting fields — the first column must be the image filename (extension and case are ignored)
 3. **Configure Layout**: Choose grid or puzzle layout, margins, spacing, scale bars and numbering
 4. **Preview & Export**: Check the layout, then export as SVG (fully editable in Inkscape), PDF or JPG
 
