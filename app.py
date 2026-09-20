@@ -374,11 +374,18 @@ def upload_images():
     
     session_folder = get_session_folder(create=True)
     
-    # Clear previous images only on first batch
+    # Clear the previous images only on the first batch (the metadata file, if any, is kept:
+    # uploading it before the images must not silently delete it)
     if is_first_batch:
-        if os.path.exists(session_folder):
-            shutil.rmtree(session_folder)
-        os.makedirs(session_folder)
+        os.makedirs(session_folder, exist_ok=True)
+        for old_name in os.listdir(session_folder):
+            if old_name.startswith('metadata_'):
+                continue
+            old_path = os.path.join(session_folder, old_name)
+            if os.path.isdir(old_path):
+                shutil.rmtree(old_path, ignore_errors=True)
+            else:
+                os.remove(old_path)
     
     uploaded_files = []
     errors = []
