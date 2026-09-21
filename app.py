@@ -526,35 +526,10 @@ def preview():
             return ''
         primary_sort_key_func = get_primary_sort_value if page_break_on_primary_change else None
 
-        # Primary sort DISPLAY value (used for the per-image title overlay) -
-        # a clean human-readable string, distinct from the grouping key above
-        # (which for natural_name returns a sort-key list, not display text).
-        def get_primary_sort_display_value(img_data):
-            if sort_by in ('alphabetical', 'natural_name'): return img_data['name']
-            elif sort_by == 'size': return str(img_data.get('size', ''))
-            elif metadata:
-                key = backend_logic.normalize_match_key(img_data['name'])
-                if key in metadata:
-                    value = metadata[key].get(sort_by, '')
-                    return str(value) if value is not None else ''
-            return ''
 
-        # The title behaves like a book chapter heading: it should only
-        # appear once, on the first image of each primary-sort group, not
-        # repeated on every single image. image_data is already sorted, so a
-        # closure tracking the last-seen group key (in sequential call order)
-        # is enough to detect "this is a new group" without needing a
-        # separate pre-pass.
-        sort_title_func = None
+        # Chapter titles: the first image of each primary-sort group carries its title
         if show_primary_sort_header:
-            _sort_title_state = {'value': None, 'seen_first': False}
-            def sort_title_func(img_data):
-                current = get_primary_sort_value(img_data)
-                if not _sort_title_state['seen_first'] or current != _sort_title_state['value']:
-                    _sort_title_state['seen_first'] = True
-                    _sort_title_state['value'] = current
-                    return get_primary_sort_display_value(img_data)
-                return ''
+            backend_logic.mark_group_titles(image_data, sort_by, metadata)
 
         # Scale images
         image_data = backend_logic.scale_images(image_data, scale_factor)
@@ -595,7 +570,7 @@ def preview():
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
-                sort_title_func=sort_title_func,
+                show_sort_titles=show_primary_sort_header,
                 sort_title_font_size=sort_header_font_size,
                 top_margin_px=effective_top_margin
             )
@@ -607,7 +582,7 @@ def preview():
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
-                sort_title_func=sort_title_func,
+                show_sort_titles=show_primary_sort_header,
                 sort_title_font_size=sort_header_font_size,
                 top_margin_px=effective_top_margin
             )
@@ -764,32 +739,9 @@ def generate_layout():
             return ''
         primary_sort_key_func = get_primary_sort_value if page_break_on_primary_change else None
 
-        # Primary sort DISPLAY value (per-image title overlay) - clean string,
-        # distinct from the grouping key above (natural_name there returns a
-        # sort-key list, not display text).
-        def get_primary_sort_display_value(img_data):
-            if sort_by in ('alphabetical', 'natural_name'): return img_data['name']
-            elif sort_by == 'size': return str(img_data.get('size', ''))
-            elif metadata:
-                key = backend_logic.normalize_match_key(img_data['name'])
-                if key in metadata:
-                    value = metadata[key].get(sort_by, '')
-                    return str(value) if value is not None else ''
-            return ''
-
-        # Chapter-heading behavior: only the first image of each primary-sort
-        # group gets the title, not every image (image_data is already
-        # sorted, so tracking the last-seen group key in call order suffices).
-        sort_title_func = None
+        # Chapter titles: the first image of each primary-sort group carries its title
         if show_primary_sort_header:
-            _sort_title_state = {'value': None, 'seen_first': False}
-            def sort_title_func(img_data):
-                current = get_primary_sort_value(img_data)
-                if not _sort_title_state['seen_first'] or current != _sort_title_state['value']:
-                    _sort_title_state['seen_first'] = True
-                    _sort_title_state['value'] = current
-                    return get_primary_sort_display_value(img_data)
-                return ''
+            backend_logic.mark_group_titles(image_data, sort_by, metadata)
 
         # Scale
         image_data = backend_logic.scale_images(image_data, scale_factor)
@@ -831,7 +783,7 @@ def generate_layout():
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
-                sort_title_func=sort_title_func,
+                show_sort_titles=show_primary_sort_header,
                 sort_title_font_size=sort_header_font_size,
                 top_margin_px=effective_top_margin
             )
@@ -843,7 +795,7 @@ def generate_layout():
                 add_object_number=add_object_number,
                 object_number_position=object_number_position,
                 object_number_font_size=object_number_font_size,
-                sort_title_func=sort_title_func,
+                show_sort_titles=show_primary_sort_header,
                 sort_title_font_size=sort_header_font_size,
                 top_margin_px=effective_top_margin
             )

@@ -470,11 +470,40 @@ def _render_item_to_svg(svg_gen, item_data, abs_x, abs_y):
         svg_gen.add_image(item_data['img'], abs_x, abs_y)
 
 
+def mark_group_titles(image_data, sort_by, metadata):
+    """Chapter titles: sets d['group_title'] on the first image of each run of equal `sort_by`
+    metadata values (the text to print above the group), '' on the others. image_data must
+    already be sorted. Only a metadata field has a value to show: for Alphabetical/Natural/
+    Random the value is always '' and nothing is printed."""
+    previous = object()
+    for d in image_data:
+        entry = metadata.get(normalize_match_key(d['name'])) if metadata else None
+        value = entry.get(sort_by) if entry else None
+        value = '' if value is None else str(value)
+        d['group_title'] = value if value != previous else ''
+        previous = value
+
+
+def _title_font(size):
+    try: return get_font(size)
+    except Exception: return ImageFont.load_default()
+
+
+def _title_band(size):
+    """Vertical space reserved above an image/row for its chapter title."""
+    return size + 10
+
+
+def _draw_group_title(pil_page, svg_gen, text, x, y, font, size):
+    ImageDraw.Draw(pil_page).text((x, y), text, font=font, fill="black")
+    svg_gen.add_text(text, x, y + size, size, font_family="Arial", anchor="start")
+
+
 def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px,
                       page_break_on_primary_change=False, primary_sort_key=None,
                       primary_break_type='new_page', divider_thickness=5, divider_width_percent=80,
                       vertical_alignment='center', add_object_number=False, object_number_position='bottom_center',
-                      object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                      object_number_font_size=18, show_sort_titles=False, sort_title_font_size=16,
                       top_margin_px=None,
                       status_callback=print):
     
@@ -502,11 +531,11 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         try: number_font = get_font(object_number_font_size)
         except: number_font = ImageFont.load_default()
 
-    # Font for the chapter-title header
-    title_font = None
-    if sort_title_func:
-        try: title_font = get_font(sort_title_font_size)
-        except: title_font = ImageFont.load_default()
+    # Chapter titles: a band above each row that starts a group (see mark_group_titles)
+    title_font = _title_font(sort_title_font_size) if show_sort_titles else None
+    title_band = _title_band(sort_title_font_size)
+    def row_band(row_images):
+        return title_band if show_sort_titles and any(d.get('group_title') for d in row_images) else 0
 
     while image_index < len(image_data):
         # Initialize PIL Page
@@ -515,26 +544,6 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         current_svg_gen = SVGGenerator(page_width, page_height)
         # Add white background rect for SVG
         current_svg_gen.add_rect(0, 0, page_width, page_height, fill="white")
-
-        # Chapter-title header: drawn once per page (like a book chapter
-        # heading), right-aligned in the empty top margin strip - never
-        # overlapping any image, since the margin is space no image is ever
-        # placed in. sort_title_func itself only returns non-empty text for
-        # the first page of a new primary-sort group (see app.py).
-        if sort_title_func and image_index < len(image_data):
-            page_title_text = sort_title_func(image_data[image_index])
-            if page_title_text:
-                title_str = str(page_title_text)
-                title_draw = ImageDraw.Draw(current_pil_page)
-                bbox = title_draw.textbbox((0, 0), title_str, font=title_font)
-                tw = bbox[2] - bbox[0]
-                tx = page_width - margin_px - tw
-                ty = max(5, margin_px // 2 - sort_title_font_size // 2)
-                title_draw.text((tx, ty), title_str, font=title_font, fill="black")
-                current_svg_gen.add_text(
-                    title_str, page_width - margin_px, ty + sort_title_font_size,
-                    sort_title_font_size, font_family="Arial", anchor="end"
-                )
 
         page_has_images = False
         page_object_counter = 1 # Reset per page
@@ -595,7 +604,8 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         total_content_height = sum(r[1] for r in page_rows)
         total_spacing_height = spacing_px * (len(page_rows) - 1) if len(page_rows) > 1 else 0
         total_separator_height = len(divider_rows) * (divider_thickness + 2 * divider_margin)
-        total_height_needed = total_content_height + total_spacing_height + total_separator_height
+        total_title_height = sum(row_band(r[0]) for r in page_rows)
+        total_height_needed = total_content_height + total_spacing_height + total_separator_height + total_title_height
         
         start_y = top_margin_px
         if vertical_alignment == 'center' and total_height_needed < available_height:
@@ -607,6 +617,13 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
         divider_dict = {row_idx: val for row_idx, val in divider_rows}
         
         for row_idx, (row_images, row_height) in enumerate(page_rows):
+            # Overflow check first, so a divider is never left alone at the bottom of a page. The title
+            # band is not required for the first row of the page, so a row that fits by itself is
+            # always placed (otherwise it would be retried forever on empty pages)
+            divider_height = divider_thickness + 2 * divider_margin if row_idx in divider_dict else 0
+            band = row_band(row_images)
+            if current_y + divider_height + row_height + (band if images_placed_on_page else 0) > page_height - margin_px: break
+
             # Render Divider
             if row_idx in divider_dict:
                 # PIL Drawing
@@ -620,9 +637,10 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
                 # SVG Drawing (Semantic Line)
                 current_svg_gen.add_line(div_start_x, divider_y, div_end_x, divider_y, stroke="black", stroke_width=divider_thickness)
                 
-                current_y += divider_thickness + 2 * divider_margin
+                current_y += divider_height
 
-            if current_y + row_height > page_height - margin_px: break
+            title_y = current_y
+            current_y += band
                 
             # Render Row Images
             total_row_img_width = sum(d['img'].width for d in row_images)
@@ -632,6 +650,12 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
             for img_data in row_images:
                 img = img_data['img']
                 paste_y = current_y + (row_height - img.height) // 2
+
+                # Chapter title, left-aligned above the row (at the image if it is not the first)
+                if band and img_data.get('group_title'):
+                    _draw_group_title(current_pil_page, current_svg_gen, img_data['group_title'],
+                                      margin_px if img_data is row_images[0] else current_x,
+                                      title_y, title_font, sort_title_font_size)
                 
                 # 1. PIL Paste
                 current_pil_page.paste(img, (current_x, paste_y), img if img.mode == 'RGBA' else None)
@@ -712,20 +736,10 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
             p.paste(img, (px, py))
             _render_item_to_svg(s, img_data, px, py)
 
-            if sort_title_func:
-                title_text = sort_title_func(img_data)
-                if title_text:
-                    title_str = str(title_text)
-                    title_draw = ImageDraw.Draw(p)
-                    bbox = title_draw.textbbox((0, 0), title_str, font=title_font)
-                    tw = bbox[2] - bbox[0]
-                    tx = page_width - margin_px - tw
-                    ty = max(5, margin_px // 2 - sort_title_font_size // 2)
-                    title_draw.text((tx, ty), title_str, font=title_font, fill="black")
-                    s.add_text(
-                        title_str, page_width - margin_px, ty + sort_title_font_size,
-                        sort_title_font_size, font_family="Arial", anchor="end"
-                    )
+            if show_sort_titles and img_data.get('group_title'):
+                _draw_group_title(p, s, img_data['group_title'], margin_px,
+                                  max(5, margin_px // 2 - sort_title_font_size // 2),
+                                  title_font, sort_title_font_size)
 
             pil_pages.append(p)
             svg_pages.append(s.get_xml())
@@ -737,7 +751,7 @@ def place_images_grid(image_data, page_size_px, grid_size, margin_px, spacing_px
 def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
                         page_break_on_primary_change=False, primary_sort_key=None,
                         add_object_number=False, object_number_position='bottom_center',
-                        object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                        object_number_font_size=18, show_sort_titles=False, sort_title_font_size=16,
                         top_margin_px=None,
                         status_callback=print):
 
@@ -753,10 +767,10 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
         all_pil, all_svg = [], []
         for k, g_imgs in groups.items():
             p, s = _place_images_puzzle_internal(g_imgs, page_size_px, margin_px, spacing_px,
+                                               batch_title=g_imgs[0].get('group_title') if show_sort_titles else None,
                                                add_object_number=add_object_number,
                                                object_number_position=object_number_position,
                                                object_number_font_size=object_number_font_size,
-                                               sort_title_func=sort_title_func,
                                                sort_title_font_size=sort_title_font_size,
                                                top_margin_px=top_margin_px,
                                                status_callback=status_callback)
@@ -768,7 +782,6 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
                                            add_object_number=add_object_number,
                                            object_number_position=object_number_position,
                                            object_number_font_size=object_number_font_size,
-                                           sort_title_func=sort_title_func,
                                            sort_title_font_size=sort_title_font_size,
                                            top_margin_px=top_margin_px,
                                            status_callback=status_callback)
@@ -776,7 +789,7 @@ def place_images_puzzle(image_data, page_size_px, margin_px, spacing_px,
 
 def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_px,
                                   add_object_number=False, object_number_position='bottom_center',
-                                  object_number_font_size=18, sort_title_func=None, sort_title_font_size=16,
+                                  object_number_font_size=18, batch_title=None, sort_title_font_size=16,
                                   top_margin_px=None,
                                   status_callback=print):
     if top_margin_px is None:
@@ -785,6 +798,12 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
     page_width, page_height = page_size_px
     bin_width = page_width - (2 * margin_px)
     bin_height = page_height - margin_px - top_margin_px
+
+    # Chapter title of this batch (one primary-sort group, see place_images_puzzle): drawn at the top
+    # of its first page, in a band kept free on every page of the batch. Without grouping the puzzle
+    # does not keep the sort order, so there is no group to title.
+    title_band = _title_band(sort_title_font_size) if batch_title else 0
+    bin_height -= title_band
     
     packer = rectpack.newPacker(rotation=False)
     images = [d['img'] for d in image_data]
@@ -815,33 +834,15 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
         current_svg = SVGGenerator(page_width, page_height)
         current_svg.add_rect(0, 0, page_width, page_height, fill="white")
 
+        if i == 0 and batch_title:
+            _draw_group_title(current_pil, current_svg, batch_title, margin_px, top_margin_px,
+                              _title_font(sort_title_font_size), sort_title_font_size)
+
         # Prepare font
         number_font = None
         if add_object_number:
             try: number_font = get_font(object_number_font_size)
             except: number_font = ImageFont.load_default()
-
-        # Chapter-title header: drawn once, on the first page of this batch
-        # (a batch is one primary-sort group when grouping is on, or the
-        # whole flat list otherwise) - like a book chapter heading,
-        # right-aligned in the empty top margin so it never overlaps an
-        # image. sort_title_func only returns non-empty text for a new group.
-        if i == 0 and sort_title_func and image_data:
-            page_title_text = sort_title_func(image_data[0])
-            if page_title_text:
-                title_str = str(page_title_text)
-                try: title_font = get_font(sort_title_font_size)
-                except: title_font = ImageFont.load_default()
-                title_draw = ImageDraw.Draw(current_pil)
-                bbox = title_draw.textbbox((0, 0), title_str, font=title_font)
-                tw = bbox[2] - bbox[0]
-                tx = page_width - margin_px - tw
-                ty = max(5, margin_px // 2 - sort_title_font_size // 2)
-                title_draw.text((tx, ty), title_str, font=title_font, fill="black")
-                current_svg.add_text(
-                    title_str, page_width - margin_px, ty + sort_title_font_size,
-                    sort_title_font_size, font_family="Arial", anchor="end"
-                )
 
         # Collect all rects to sort them by position (reading order)
         page_rects = []
@@ -863,7 +864,7 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
             img = data['img']
             
             x = margin_px + rect.x
-            y = top_margin_px + rect.y
+            y = top_margin_px + title_band + rect.y
             
             # 1. PIL
             current_pil.paste(img, (x, y), img if img.mode == 'RGBA' else None)
@@ -929,23 +930,6 @@ def _place_images_puzzle_internal(image_data, page_size_px, margin_px, spacing_p
 
         p.paste(img, (x, y))
         _render_item_to_svg(s, d, x, y)
-
-        if sort_title_func:
-            title_text = sort_title_func(d)
-            if title_text:
-                try: leftover_title_font = get_font(sort_title_font_size)
-                except: leftover_title_font = ImageFont.load_default()
-                title_str = str(title_text)
-                title_draw = ImageDraw.Draw(p)
-                bbox = title_draw.textbbox((0, 0), title_str, font=leftover_title_font)
-                tw = bbox[2] - bbox[0]
-                tx = page_width - margin_px - tw
-                ty = max(5, margin_px // 2 - sort_title_font_size // 2)
-                title_draw.text((tx, ty), title_str, font=leftover_title_font, fill="black")
-                s.add_text(
-                    title_str, page_width - margin_px, ty + sort_title_font_size,
-                    sort_title_font_size, font_family="Arial", anchor="end"
-                )
 
         pil_pages.append(p)
         svg_pages.append(s.get_xml())

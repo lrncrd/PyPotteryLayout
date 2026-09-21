@@ -166,6 +166,7 @@ function setupEventListeners() {
 
     // Metadata upload triggers sort option update
     metadataUpload.addEventListener('change', updateSortOptions);
+    updateSortHeaderAvailability();
 
     // Buttons
     generateBtn.addEventListener('click', handleGenerate);
@@ -695,7 +696,10 @@ async function handleGenerate() {
             // Show download section
             document.getElementById('resultFilename').textContent = data.filename;
             document.getElementById('resultPages').textContent = data.pages;
-            document.getElementById('downloadBtn').href = data.download_url;
+            // `download` keeps the browser from navigating, so the "leave the site?" beforeunload prompt doesn't fire
+            const downloadBtn = document.getElementById('downloadBtn');
+            downloadBtn.href = data.download_url;
+            downloadBtn.setAttribute('download', data.filename || '');
             if (emptyStateSection) emptyStateSection.style.display = 'none';
             if (errorSection) errorSection.style.display = 'none';
             resultSection.style.display = 'block';
@@ -718,8 +722,25 @@ async function handleGenerate() {
     }
 }
 
+// Styled replacement for confirm(): resolves true only if the user clicks the confirm button
+function confirmClear() {
+    return new Promise(resolve => {
+        const el = document.getElementById('clearModal');
+        const modal = bootstrap.Modal.getOrCreateInstance(el);
+        let confirmed = false;
+        const onConfirm = () => { confirmed = true; modal.hide(); };
+        const btn = document.getElementById('clearConfirmBtn');
+        btn.addEventListener('click', onConfirm, { once: true });
+        el.addEventListener('hidden.bs.modal', () => {
+            btn.removeEventListener('click', onConfirm);
+            resolve(confirmed);
+        }, { once: true });
+        modal.show();
+    });
+}
+
 async function handleClear() {
-    if (!confirm('Clear all uploaded files and reset settings?')) {
+    if (!(await confirmClear())) {
         return;
     }
 
@@ -749,6 +770,7 @@ async function handleClear() {
         uploadedImages = false;
         uploadedMetadata = false;
         metadataHeaders = [];
+        updateSortOptions();
 
         // Clear terminal if it exists
         if (terminalOutput) {
@@ -760,6 +782,19 @@ async function handleClear() {
     } catch (error) {
         logTerminal(`Error clearing session: ${error.message}`, 'error');
         showError(`Error clearing session: ${error.message}`);
+    }
+}
+
+// The chapter title is the metadata value of the primary sort: with Alphabetical/Natural/Random
+// there is none, so the option is only available when a metadata field is the primary sort
+function updateSortHeaderAvailability() {
+    const isMetadata = metadataHeaders.includes(document.getElementById('sortBy').value);
+    const checkbox = document.getElementById('showPrimarySortHeader');
+    checkbox.disabled = !isMetadata;
+    checkbox.parentElement.title = isMetadata ? '' : 'Choose a metadata field as Primary Sort to use this';
+    if (!isMetadata) {
+        checkbox.checked = false;
+        document.getElementById('sortHeaderOptions').style.display = 'none';
     }
 }
 
@@ -817,6 +852,8 @@ function updateSortOptions() {
     if (currentSecondary !== 'none') {
         sortBySecondary.value = currentSecondary;
     }
+
+    updateSortHeaderAvailability();
 }
 
 function updateMetadataFieldCheckboxes() {
